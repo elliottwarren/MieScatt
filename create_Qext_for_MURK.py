@@ -685,11 +685,48 @@ def stacked_monthly_bar_rel_aerosol_vol(pm_rel_vol, pm_mass_merged, savedir, sit
 
 
     # date for plotting
-    title_date_range = pm_mass_merged['time'][0].strftime('%Y/%m/%d') + ' - ' + pm10_mass_merged['time'][-1].strftime('%Y/%m/%d')
+    title_date_range = pm_mass_merged['time'][0].strftime('%Y/%m/%d') + ' - ' + pm_mass_merged['time'][-1].strftime('%Y/%m/%d')
     plt.suptitle(site_ins['site_long'] + ': ' + title_date_range)
 
-    save_date_range = pm_mass_merged['time'][0].strftime('%Y%m%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y%m%d')
+    save_date_range = pm_mass_merged['time'][0].strftime('%Y%m%d') + '-' + pm_mass_merged['time'][-1].strftime('%Y%m%d')
     plt.savefig(savedir + 'Q_ext_dry_monthly_' + site_ins['site_short'] + '_' + save_date_range)
+
+    return fig
+
+def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir):
+
+    # make a range of colours for the different months
+    colour_range = eu.create_colours(12)[:-1]
+
+    # plot the different MURK Q_ext,dry curves, for each month
+    fig = plt.figure(figsize=(6, 4))
+
+    for month_i, month in zip(range(12), range(1, 13)):
+
+        # plot it
+        plt.semilogx(r_md_micron, Q_dry_murk[:, month_i], label=str(month), color=colour_range[month_i])
+
+
+    # prettify
+    plt.xlabel(r'$r_{md} \/\mathrm{[\mu m]}$', labelpad=-10, fontsize=13)
+    plt.xlim([0.05, 5.0])
+    plt.ylim([0.0, 5.0])
+    plt.ylabel(r'$Q_{ext,dry}$', fontsize=13)
+    plt.legend(fontsize=8, loc='best')
+    plt.tick_params(axis='both',labelsize=10)
+    plt.grid(b=True, which='major', color='grey', linestyle='--')
+    plt.grid(b=True, which='minor', color=[0.85, 0.85, 0.85], linestyle='--')
+
+    title_date_range = pm10_mass_merged['time'][0].strftime('%Y/%m/%d') + ' - ' + pm10_mass_merged['time'][-1].strftime('%Y/%m/%d')
+    plt.suptitle(site_ins['site_long'] + ': ' + title_date_range)
+
+    save_date_range = pm10_mass_merged['time'][0].strftime('%Y%m%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y%m%d')
+
+    plt.savefig(savedir + 'Q_ext_dry_murk_monthly_'+site_ins['site_short']+'_'+save_date_range+'.png')
+    plt.tight_layout(h_pad=10.0)
+    plt.close()
+
+
 
     return fig
 
@@ -790,8 +827,8 @@ if __name__ == '__main__':
 
     # create dry size distribution [m]
     step = 0.005
-    r_md_microm = np.arange(0.000 + step, 5.000 + step, step)
-    r_md = r_md_microm * 1.0e-06
+    r_md_micron = np.arange(0.000 + step, 5.000 + step, step)
+    r_md = r_md_micron * 1.0e-06
 
     # calculate size parameter for dry and wet
     x_dry = (2.0 * np.pi * r_md)/ceil_lambda
@@ -827,38 +864,39 @@ if __name__ == '__main__':
 
     # BARCHART - plot the relative volume of each aerosol, across all months
     # https://matplotlib.org/1.3.1/examples/pylab_examples/bar_stacked.html use to improve x axis
-
     stacked_monthly_bar_rel_aerosol_vol(pm10_rel_vol, pm10_mass_merged, savedir, site_ins)
 
-
-
-    # plot the different MURK Q_ext,dry curves, for each month
-    fig = plt.figure(figsize=(6, 4))
-
-    for aer_i in all_aer_order:
-
-        # plot it
-        plt.semilogx(r_md_microm, Q_dry[aer_i], label=aer_i, color=all_aer[aer_i])
-        # plt.semilogx(r_md_microm, Q_dry, label='dry murk', color=[0,0,0])
-        # plt.semilogx(r_m_microm, Q_del, label='deliquescent murk (RH = ' + str(RH) + ')')
-        # plt.semilogx(r_m_microm, Q_coat, label='coated murk (RH = ' + str(RH) + ')')
-
-
-    # plt.title('lambda = ' + str(ceil_lambda[0]) + 'nm')
-    plt.xlabel(r'$r_{md} \/\mathrm{[\mu m]}$', labelpad=-10, fontsize=13)
-    plt.xlim([0.05, 5.0])
-    plt.ylim([0.0, 5.0])
-    #plt.xlim([0.01, 0.2])
-    #plt.ylim([0.0, 0.1])
-    plt.ylabel(r'$Q_{ext,dry}$', fontsize=13)
-    plt.legend(fontsize=8, loc='best')
-    plt.tick_params(axis='both',labelsize=10)
-    plt.grid(b=True, which='major', color='grey', linestyle='--')
-    plt.grid(b=True, which='minor', color=[0.85, 0.85, 0.85], linestyle='--')
-    plt.savefig(savedir + 'Q_ext_manyAer2_' + str(ceil_lambda[0]) + 'nm.png')
-    print 'data dir is... ' + savedir + 'Q_ext_manyAer_' + str(ceil_lambda[0]) + 'nm.png'
-    plt.tight_layout(h_pad=10.0)
-    plt.close()
+    # colour_range = eu.create_colours(12)[:-1]
+    #
+    # # plot the different MURK Q_ext,dry curves, for each month
+    # fig = plt.figure(figsize=(6, 4))
+    #
+    # for month_i, month in zip(range(12), range(1, 13)):
+    #
+    #     # plot it
+    #     plt.semilogx(r_md_micron, Q_dry_murk[:, month_i], label=str(month), color=colour_range[month_i])
+    #
+    #
+    # # plt.title('lambda = ' + str(ceil_lambda[0]) + 'nm')
+    # plt.xlabel(r'$r_{md} \/\mathrm{[\mu m]}$', labelpad=-10, fontsize=13)
+    # plt.xlim([0.05, 5.0])
+    # plt.ylim([0.0, 5.0])
+    # #plt.xlim([0.01, 0.2])
+    # #plt.ylim([0.0, 0.1])
+    # plt.ylabel(r'$Q_{ext,dry}$', fontsize=13)
+    # plt.legend(fontsize=8, loc='best')
+    # plt.tick_params(axis='both',labelsize=10)
+    # plt.grid(b=True, which='major', color='grey', linestyle='--')
+    # plt.grid(b=True, which='minor', color=[0.85, 0.85, 0.85], linestyle='--')
+    #
+    # title_date_range = pm10_mass_merged['time'][0].strftime('%Y/%m/%d') + ' - ' + pm10_mass_merged['time'][-1].strftime('%Y/%m/%d')
+    # plt.suptitle(site_ins['site_long'] + ': ' + title_date_range)
+    #
+    # save_date_range = pm10_mass_merged['time'][0].strftime('%Y%m%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y%m%d')
+    #
+    # plt.savefig(savedir + 'Q_ext_dry_murk_monthly_'+site_ins['site_short']+'.png')
+    # plt.tight_layout(h_pad=10.0)
+    # plt.close()
 
     # plot the radius
     # plot_radius(savedir, r_md, r_m)
