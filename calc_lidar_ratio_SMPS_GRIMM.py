@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import pickle
 from copy import deepcopy
+import os
 
 import numpy as np
 import datetime as dt
@@ -1760,6 +1761,8 @@ if __name__ == '__main__':
     site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
             'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
 
+    period = site_ins['period']
+
     # use PM1 or pm10 data?
     process_type = 'pm10-2p5'
 
@@ -2094,7 +2097,7 @@ if __name__ == '__main__':
 
     # -----------------------------------------------------------
 
-    print 'calculating num_conc, ,GF and n_wet...'
+    print 'calculating num_conc, GF and n_wet...'
 
     # Calculate the number concentration now that we know the dry radii
         # find relative N from N(mass, r_md)
@@ -2265,7 +2268,7 @@ if __name__ == '__main__':
     rh_bin_ends = np.append(rh_bin_starts[1:], 100.0)
 
     # set up limit for soot last bin to be inf [fraction]
-    soot_starts = np.array([0.0, 0.03, 0.09])
+    soot_starts = np.array([0.0, 0.04, 0.09])
     soot_ends = np.append(soot_starts[1:], np.inf)
     soot_bins_num = len(soot_starts)
 
@@ -2376,14 +2379,17 @@ if __name__ == '__main__':
     [i.set_visible(False) for i in lin] # set the line to be invisible
 
 
-
     plt.tight_layout()
-    plt.savefig(savedir + 'S_vs_RH_binnedSoot_'+year+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'.png')
 
-# for i in rh_binned:
-#      for j in i:
-#          print len(j)
-#      print ''
+    # save fig as unique image
+    i = 1
+    savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
+    while os.path.exists(savepath) == True:
+        i += 1
+        savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
+
+    plt.savefig(savepath)
+
 
 
 
