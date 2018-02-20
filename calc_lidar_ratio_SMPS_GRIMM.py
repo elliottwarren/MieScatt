@@ -1714,13 +1714,12 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
     S = sigma_ext_tot / sigma_back_tot
 
     # store all variables in a dictionary
-    optics = {'S': S, 'C_ext': C_ext, 'C_back': C_back,
-              'sigma_ext': sigma_ext, 'sigma_back': sigma_back}
+    optics = {'S': S, 'sigma_ext': sigma_ext, 'sigma_back': sigma_back}
 
     return optics
 
 # saving
-def pickle_optics_save(site_ins, optics, datadir, savestr, savesub, ceil_lambda_str_nm, **kwargs):
+def pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, **kwargs):
 
     """
     Save the calculated optical properties, given that they can easily take 3+ hours to compute
@@ -1737,7 +1736,7 @@ def pickle_optics_save(site_ins, optics, datadir, savestr, savesub, ceil_lambda_
     pickle_save = {'site_ins':site_ins, 'optics': optics}
     if kwargs is not None:
         pickle_save.update(kwargs)
-    with open(datadir + 'pickle/'+savestr+'_'+savesub+'_'+site_ins['period']+'_'+ceil_lambda_str_nm+'.pickle', 'wb') as handle:
+    with open(pickledir +savestr+'_'+savesub+'_'+site_ins['period']+'_'+ceil_lambda_str_nm+'.pickle', 'wb') as handle:
         pickle.dump(pickle_save, handle)
 
     return
@@ -1799,6 +1798,7 @@ if __name__ == '__main__':
     # directories
     maindir = '/home/nerc/Documents/MieScatt/'
     datadir = '/home/nerc/Documents/MieScatt/data/' + site_ins['site_long'] + '/'
+    pickledir = '/home/nerc/Documents/MieScatt/data/pickle/' + site_ins['site_long'] + '/'
 
     # save dir
     if Geisinger_subsample_flag == 1:
@@ -2152,7 +2152,7 @@ if __name__ == '__main__':
     # save the output data encase it needs to be used again (pickle!)
     #   calculating the lidar ratio for 1 year can take 3-6 hours (depending on len(D))
     if picklesave == True:
-        pickle_optics_save(site_ins, optics, datadir, savestr, savesub, ceil_lambda_str_nm, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
+        pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda)
 
 
@@ -2268,10 +2268,14 @@ if __name__ == '__main__':
     rh_bin_ends = np.append(rh_bin_starts[1:], 100.0)
 
     # set up limit for soot last bin to be inf [fraction]
-    soot_starts = np.array([0.0, 0.04, 0.09])
+    soot_starts = np.array([0.0, 0.04, 0.08])
     soot_ends = np.append(soot_starts[1:], np.inf)
     soot_bins_num = len(soot_starts)
 
+    # variables to help plot the legend
+    soot_starts_str = [str(int(i*100.0)) for i in soot_starts]
+    soot_ends_str = [str(int(i*100.0)) for i in soot_ends[:-1]] + ['100']
+    soot_legend_str = [i+'-'+j+' %' for i, j in zip(soot_starts_str, soot_ends_str)]
     soot_colours = ['blue', 'orange', 'red']
 
     # positions for each boxplot (1/6, 3/6, 5/6 into each bin, given 3 soot groups)
@@ -2334,7 +2338,7 @@ if __name__ == '__main__':
     plt.hold(True)
     for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
 
-        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], whis=[25, 75], sym='x')
+        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], sym='x')
 
         # colour the boxplots
         for c, colour_c in enumerate(soot_colours):
@@ -2375,7 +2379,7 @@ if __name__ == '__main__':
     for c, colour_c in enumerate(soot_colours):
         lin_i, = plt.plot([np.nanmean(S),np.nanmean(S)],color=colour_c) # plot line with matching colour
         lin += [lin_i] # keep the line handle in a list for the legend plotting
-    plt.legend(lin,('0-3 % soot', '3-9 % soot', '> 9 % soot'), fontsize=10, loc=(0.02,0.68))
+    plt.legend(lin, soot_legend_str, fontsize=10, loc=(0.02,0.68))
     [i.set_visible(False) for i in lin] # set the line to be invisible
 
 
