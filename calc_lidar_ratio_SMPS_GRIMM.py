@@ -1719,7 +1719,7 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
     return optics
 
 # saving
-def pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, **kwargs):
+def pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, outputSave=False, **kwargs):
 
     """
     Save the calculated optical properties, given that they can easily take 3+ hours to compute
@@ -1728,7 +1728,7 @@ def pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambd
     :param datadir:
     :param savestr:
     :param savesub:
-    :param ceil_lambda_str_nm:
+    :param ceil_lambda_str_nm:l
     :param kwargs:
     :return:
     """
@@ -1739,7 +1739,10 @@ def pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambd
     with open(pickledir +savestr+'_'+savesub+'_'+site_ins['period']+'_'+ceil_lambda_str_nm+'.pickle', 'wb') as handle:
         pickle.dump(pickle_save, handle)
 
-    return
+    if outputSave == True:
+        return pickle_save
+    else:
+        return
 
 # def main():
 if __name__ == '__main__':
@@ -2152,7 +2155,7 @@ if __name__ == '__main__':
     # save the output data encase it needs to be used again (pickle!)
     #   calculating the lidar ratio for 1 year can take 3-6 hours (depending on len(D))
     if picklesave == True:
-        pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
+        pickle_save = pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda)
 
 
@@ -2263,7 +2266,7 @@ if __name__ == '__main__':
 
     # BOX PLOT - S binned by RH, then by soot
 
-    # set up bins to divide the data [%]
+    ## 1. set up bins to divide the data [%]
     rh_bin_starts = np.array([0.0, 60.0, 70.0, 80.0, 90.0])
     rh_bin_ends = np.append(rh_bin_starts[1:], 100.0)
 
@@ -2288,9 +2291,7 @@ if __name__ == '__main__':
 
         bin_6th = (rh_e-rh_s) * 1.0/6.0 # 1/6th of the current bin width
         pos += [[rh_s + bin_6th, rh_s +(3*bin_6th), rh_s+(5*bin_6th)]] #1/6, 3/6, 5/6 into each bin for the soot boxplots
-
         widths += [bin_6th]
-
         mid += [rh_s +(3*bin_6th)]
 
 
@@ -2332,13 +2333,13 @@ if __name__ == '__main__':
         rh_split['n'] += [rh_bin_n_i]
 
 
-    # start the boxplots
+    ## 2. Start the boxplots
     # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
     fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
     plt.hold(True)
     for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
 
-        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], sym='x')
+        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], whis=[10, 90], positions=pos[j], sym='x')
 
         # colour the boxplots
         for c, colour_c in enumerate(soot_colours):
@@ -2361,6 +2362,7 @@ if __name__ == '__main__':
         ax.text(np.hstack(pos)[tick], y_max - (y_max * (0.05)*(k+1)), upperLabels[tick],
                  horizontalalignment='center', size='x-small')
 
+    ## 3. Prettify boxplot (legend, vertical lines, sample size at top)
     # prettify
     ax.set_xlim([0.0, 100.0])
     ax.set_xticks(mid)
@@ -2382,10 +2384,9 @@ if __name__ == '__main__':
     plt.legend(lin, soot_legend_str, fontsize=10, loc=(0.02,0.68))
     [i.set_visible(False) for i in lin] # set the line to be invisible
 
-
     plt.tight_layout()
 
-    # save fig as unique image
+    ## 4. Save fig as unique image
     i = 1
     savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
     while os.path.exists(savepath) == True:
