@@ -518,6 +518,29 @@ def rmse(predictions, targets):
 
     return np.sqrt(val)
 
+# distributions
+
+def normpdf(x, mean, sd):
+
+    """
+    Gives the probability of y, given a value of x, assuming a gaussian distribution
+    :param x:
+    :param mean:
+    :param sd:
+    :return:
+
+    unit of p(y) is a fraction
+    """
+
+    from math import exp
+
+    var = float(sd) ** 2
+    pi = 3.1415926
+    denom = (2 * pi * var) ** .5
+    num = exp(-(float(x) - float(mean)) ** 2 / (2 * var))
+
+    return num / denom
+
 # datetime processing
 
 def dateList_to_datetime(dayList):
@@ -738,6 +761,20 @@ def add_at(ax, text, loc=2):
     _at = AnchoredText(text, loc=loc, prop=fp)
     ax.add_artist(_at)
     return _at
+
+def create_colours(intervals):
+
+    r = 0.2
+    g = 0.5
+
+    step = 1.0 / intervals
+
+    b_colours = np.arange(0.0, 1.0 + step, step)
+    g_colours = np.arange(1.0, 0.0 - step, -step)
+
+    colours = [[r, g_colours[i], b_colours[i]] for i in range(len(b_colours))]
+
+    return colours
 
 # other
 
