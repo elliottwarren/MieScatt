@@ -1871,9 +1871,16 @@ if __name__ == '__main__':
     # ==============================================================================
 
     # # read in any pickled S data from before
-    # filename = datadir + '.....pickle'
-    # with open(filename, 'rb') as handle:
-    #     pickle_in = pickle.load(handle)
+    filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
+    with open(filename, 'rb') as handle:
+        pickle_load_in = pickle.load(handle)
+
+    optics = pickle_load_in['optics']
+    S = optics['S']
+    met = pickle_load_in['met']
+    N_weight_pm10 = pickle_load_in['N_weight']
+    pm10_mass = pickle_load_in['pm10_mass']
+
 
     # read in the complex index of refraction data for the aerosol species (can include water)
     n_species = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
@@ -2336,10 +2343,10 @@ if __name__ == '__main__':
     ## 2. Start the boxplots
     # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
     fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
-    plt.hold(True)
+    # plt.hold(True)
     for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
 
-        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], whis=[10, 90], positions=pos[j], sym='x')
+        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], sym='x')
 
         # colour the boxplots
         for c, colour_c in enumerate(soot_colours):
@@ -2352,7 +2359,7 @@ if __name__ == '__main__':
             plt.setp(bp['medians'][c], color=colour_c)
             [plt.setp(bp['caps'][i], color=colour_c) for i in c_pair_idx]
             [plt.setp(bp['whiskers'][i], color=colour_c) for i in c_pair_idx]
-            [plt.setp(bp['fliers'][i], color=colour_c) for i in c_pair_idx]
+            #[plt.setp(bp['fliers'][i], color=colour_c) for i in c_pair_idx]
 
     # add sample number at the top of each box
     (y_min, y_max) = ax.get_ylim()
