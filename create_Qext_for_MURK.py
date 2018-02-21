@@ -930,8 +930,9 @@ if __name__ == '__main__':
     # site information
     # site_ins = {'site_short':'NK', 'site_long': 'North Kensington',
     #             'ceil_lambda': 0.905e-06, 'land-type': 'urban'}
-
-    site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton',
+    # site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton',
+    #             'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
+    site_ins = {'site_short':'Ha', 'site_long': 'Harwell',
                 'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
 
     # wavelength
@@ -973,7 +974,7 @@ if __name__ == '__main__':
     timeRes = 60 * 24 # daily
 
     # averaging up to
-    average_up = 'total'
+    average_up = 'monthly'
 
     # save the Q(dry) curve for MURK?
     savedata = True
@@ -991,6 +992,10 @@ if __name__ == '__main__':
     elif site_ins['site_short'] == 'Ch':
         filename_pm10species = 'PM10species_Hr_Chilbolton_DEFRA_11012016-30092017.csv'
         filename_oc_ec = 'PM10_OC_EC_Daily_Chilbolton_DEFRA_11012016-31122016.csv'
+
+    elif site_ins['site_short'] == 'Ha':
+        filename_pm10species = 'PM10species_Hr_Harwell_DEFRA_01112011-31122015.csv'
+        filename_oc_ec = 'PM10_OC_EC_Daily_Harwell_DEFRA_01012010-31122015.csv'
 
     pm10_mass_in, _ = read_PM_mass_long_term_data(datadir, filename_pm10species)
 
