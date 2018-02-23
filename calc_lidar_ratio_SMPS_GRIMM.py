@@ -2342,7 +2342,8 @@ if __name__ == '__main__':
 
     ## 2. Start the boxplots
     # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
-    fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
+    fig = plt.figure(figsize=(7, 3.5))
+    # fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
     # plt.hold(True)
     for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
 
