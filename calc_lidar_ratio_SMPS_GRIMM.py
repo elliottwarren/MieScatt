@@ -2342,7 +2342,8 @@ if __name__ == '__main__':
 
     ## 2. Start the boxplots
     # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
-    fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
+    fig = plt.figure(figsize=(7, 3.5))
+    # fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
     # plt.hold(True)
     for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
 
@@ -2361,6 +2362,7 @@ if __name__ == '__main__':
             [plt.setp(bp['whiskers'][i], color=colour_c) for i in c_pair_idx]
             #[plt.setp(bp['fliers'][i], color=colour_c) for i in c_pair_idx]
 
+    print 'test'
     # add sample number at the top of each box
     (y_min, y_max) = ax.get_ylim()
     upperLabels = [str(np.round(n, 2)) for n in np.hstack(rh_split['n'])]
