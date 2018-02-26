@@ -620,7 +620,7 @@ def linear_interpolate_n(particle, aim_lambda):
 
     return n, dict_parts
 
-def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, averageType='monthly'):
+def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageType='monthly'):
 
     """
     Calculate the dry extinction efficiency for each aerosol (Q_dry_aer) and for MURK (Q_dry_murk)
@@ -628,11 +628,10 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, averageType='mon
     :param pm_rel_vol:
     :param ceil_lambda:
     :param aer_particles_long:
+    :param r_md: dry particle radius [meters]
     :param averageType: ['monthly' or 'yearly'] Type of average data being used to calculate Q_ext_dry
     :return: Q_dry_aer: dry extinction efficiencyfor each aerosol separately
     :return: Q_dry_murk: dry extinction efficiency for aerosols combined into the new MURK
-    :return: r_md: [meters] dry radius
-    :return: r_md_micron: [microns] dry radius
     """
 
     def calc_n_aerosol(aer_particles_long, ceil_lambda):
@@ -704,11 +703,6 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, averageType='mon
     # calculate n for MURK, for each month using volume mixing method
     n_murk = np.nansum([pm_rel_vol[aer_i] * n_aerosol[aer_i] for aer_i in pm_rel_vol.keys()], axis=0)
 
-    # create dry size distribution [m]
-    step = 0.005
-    r_md_micron = np.arange(0.000 + step, 5.000 + step, step)
-    r_md = r_md_micron * 1.0e-06
-
     # calculate size parameter for dry and wet
     x_dry = (2.0 * np.pi * r_md)/ceil_lambda
 
@@ -733,7 +727,36 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, averageType='mon
         all_particles_dry = [Mie(x=x_i, m=n_i) for x_i in x_dry]
         Q_dry_murk[:, month_idx] = np.array([particle.qext() for particle in all_particles_dry])
 
-    return Q_dry_aer, Q_dry_murk, r_md, r_md_micron
+    return Q_dry_aer, Q_dry_murk
+
+def gaussian_weighted_Q_dry_murk(Q_dry_murk, ceil_lambda_range, ceil_lambda):
+
+    """
+    Calculate the gaussian weighted value for Q_dry_murk, with respect to wavelength.
+
+    :param Q_dry_murk: Q_ext_dry for murk that needs the weighting applied to it
+    :param ceil_lambda_range: range of lambda values to calculate P(lambda) for, and then used for the weighting
+    :param ceil_lambda: mean/central wavelength for the ceilometer
+    :return:Q_dry_murk_weighted: guassian weighted Q_ext_dry for MURK
+    """
+
+    # sigma backcalculated from FWHM: https://en.wikipedia.org/wiki/Full_width_at_half_maximum - based on wolfram alpha
+    # calculate standard deviation (sigma) from full width half maximum for CL31
+    FWHM = 4.0e-09
+    sigma = FWHM /(2.0 * np.sqrt(2.0 * np.log(2.0)))
+
+    # calculate P(lambda) across the whole set of blks for the main (mean) ceilometer wavelength (ceil_lambda)
+    weights = np.array([eu.normpdf(i, ceil_lambda, sigma) for i in ceil_lambda_range])
+
+    # modify weights so they add up to 1
+    # convex combination - https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Convex_combination_example
+    convex_weights = weights/np.sum(weights)
+
+    # 1) apply the weights for each wavelength to Q_dry_murk to find the contribution from each wavelength separately
+    # 2) sum up the weighted Q_dry_murk, across all the wavelengths, to get the final guassian weighted Q_dry_murk
+    Q_dry_murk_weighted = np.sum(np.array([w * Q_dry_murk for w in convex_weights]), axis=0)
+
+    return Q_dry_murk_weighted
 
 # plotting
 
@@ -1031,13 +1054,32 @@ if __name__ == '__main__':
     # Calculate Q_ext,dry for each lambda
     # -----------------------------------------------
 
+
     # run Q_ext code for range of wavelengths
 
-    # monthly
-    Q_dry_aer, Q_dry_murk, r_md, r_md_micron = calc_Q_ext_dry(pm10_rel_vol, ceil_lambda, aer_particles_long,
-                                                              averageType=average_up)
+    # range of lambda around the main wavelength, to use in gaussian weighting
+    #   make sure that the wavelength range is large enough so the tails of the distribution are not cut off!
+    ceil_lambda_range = np.arange(ceil_lambda - 40e-09, ceil_lambda + 40e-09, 1e-09)
 
-    # create guassian across the wavelengths to make one for 905 nm
+    # create dry size distribution [m]
+    step = 0.005
+    r_md_micron = np.arange(0.000 + step, 5.000 + step, step)
+    r_md = r_md_micron * 1.0e-06
+
+    for lambda_idx, lambda_i in enumerate(ceil_lambda_range):
+
+        # calculate Q_dry for each aerosol, and for murk given the relative volume of each aerosol species
+        Q_dry_aer, Q_dry_murk = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_md,
+                                                                  averageType=average_up)
+
+    # create guassian weighted Q_dry_murk across the wavelengths to make one for the main ceilometer wavelength
+    Q_dry_murk_lambda_weighted = gaussian_weighted_Q_dry_murk(Q_dry_murk, ceil_lambda_range, ceil_lambda)
+
+    # create a guassian weighted Q_dry_murk across a range of radii for each value in the radii range.
+    #   need to do this as Q_dry_murk is extremely sensitive to radii, and small changes in radii = large changes in
+    #   optical properties!
+
+
 
     # -----------------------------------------------
     # Saving
