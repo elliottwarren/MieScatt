@@ -1031,9 +1031,13 @@ if __name__ == '__main__':
     # Calculate Q_ext,dry for each lambda
     # -----------------------------------------------
 
+    # run Q_ext code for range of wavelengths
+
     # monthly
     Q_dry_aer, Q_dry_murk, r_md, r_md_micron = calc_Q_ext_dry(pm10_rel_vol, ceil_lambda, aer_particles_long,
                                                               averageType=average_up)
+
+    # create guassian across the wavelengths to make one for 905 nm
 
     # -----------------------------------------------
     # Saving
