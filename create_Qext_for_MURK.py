@@ -707,11 +707,12 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageTyp
     x_dry = (2.0 * np.pi * r_md)/ceil_lambda
 
 
-    # Calc extinction efficiency for each dry aerosol
-    Q_dry_aer = {}
-    for key, n_i in n_aerosol.iteritems():
-        all_particles_dry = [Mie(x=x_i, m=n_i) for x_i in x_dry]
-        Q_dry_aer[key] = np.array([particle.qext() for particle in all_particles_dry])
+    # # Calc extinction efficiency for each dry aerosol
+    # # Commented out to save computational resources
+    # Q_dry_aer = {}
+    # for key, n_i in n_aerosol.iteritems():
+    #     all_particles_dry = [Mie(x=x_i, m=n_i) for x_i in x_dry]
+    #     Q_dry_aer[key] = np.array([particle.qext() for particle in all_particles_dry])
 
     # Calc extinction efficiency for the monthly MURK values
 
@@ -727,7 +728,7 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageTyp
         all_particles_dry = [Mie(x=x_i, m=n_i) for x_i in x_dry]
         Q_dry_murk[:, month_idx] = np.array([particle.qext() for particle in all_particles_dry])
 
-    return Q_dry_aer, Q_dry_murk
+    return Q_dry_murk
 
 def gaussian_weighted_Q_dry_murk(Q_dry_murk, ceil_lambda_range, ceil_lambda):
 
@@ -752,9 +753,12 @@ def gaussian_weighted_Q_dry_murk(Q_dry_murk, ceil_lambda_range, ceil_lambda):
     # convex combination - https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Convex_combination_example
     convex_weights = weights/np.sum(weights)
 
+    # calculate Q_dry_murk for each of the wavelengths, weights have been calculated for
+
+
     # 1) apply the weights for each wavelength to Q_dry_murk to find the contribution from each wavelength separately
     # 2) sum up the weighted Q_dry_murk, across all the wavelengths, to get the final guassian weighted Q_dry_murk
-    Q_dry_murk_weighted = np.sum(np.array([w * Q_dry_murk for w in convex_weights]), axis=0)
+    Q_dry_murk_weighted = np.sum(convex_weights[:, None, None] * Q_dry_murk, axis=0)
 
     return Q_dry_murk_weighted
 
@@ -816,7 +820,17 @@ def stacked_monthly_bar_rel_aerosol_vol(pm_rel_vol, pm_mass_merged, savedir, sit
 
     return fig
 
-def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir):
+def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, extra=''):
+
+    """
+    Plot the monthly Q_ext,dry values for MURK
+    :param Q_dry_murk:
+    :param pm10_mass_merged:
+    :param site_ins:
+    :param savedir:
+    :param extra: string to change the save filename (bit of a rough approach)
+    :return:fig
+    """
 
     # make a range of colours for the different months
     colour_range = eu.create_colours(12)[:-1]
@@ -845,7 +859,7 @@ def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir):
 
     save_date_range = pm10_mass_merged['time'][0].strftime('%Y%m%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y%m%d')
 
-    plt.savefig(savedir + 'Q_ext_dry_murk_monthly_'+site_ins['site_short']+'_'+save_date_range+'.png')
+    plt.savefig(savedir + 'Q_ext_dry_murk_monthly_'+site_ins['site_short']+'_'+save_date_range+'_'+extra+'.png')
     plt.tight_layout(h_pad=10.0)
     plt.close()
 
@@ -853,7 +867,7 @@ def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir):
 
     return fig
 
-def lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir):
+def lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, extra=''):
 
     # make a range of colours for the different months
     colour_range = eu.create_colours(12)[:-1]
@@ -877,7 +891,7 @@ def lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir)
     plt.xlabel(r'$r_{md} \/\mathrm{[\mu m]}$', labelpad=-10, fontsize=13)
     plt.xlim([0.05, 5.0])
     # plt.ylim([0.0, 5.0])
-    plt.ylabel(r'$Q_{ext,dry}$', fontsize=13)
+    plt.ylabel(r'$\frac{Q_{ext,dry,month}}{Q_{ext,dry,average}}$', labelpad=15, fontsize=13)
     plt.legend(fontsize=8, loc='best', ncol=2)
     plt.tick_params(axis='both',labelsize=10)
     plt.grid(b=True, which='major', color='grey', linestyle='--')
@@ -888,7 +902,7 @@ def lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir)
 
     save_date_range = pm10_mass_merged['time'][0].strftime('%Y%m%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y%m%d')
 
-    plt.savefig(savedir + 'Q_ext_dry_murk_monthly_ratio_'+site_ins['site_short']+'_'+save_date_range+'.png')
+    plt.savefig(savedir + 'Q_ext_dry_murk_monthly_ratio_'+site_ins['site_short']+'_'+save_date_range+'_'+extra+'.png')
     plt.tight_layout(h_pad=10.0)
     plt.close()
 
@@ -1002,6 +1016,9 @@ if __name__ == '__main__':
     # save the Q(dry) curve for MURK?
     savedata = True
 
+    # weight the calculations of Q_ext_dry for wavelength and radii?
+    weight_Q_ext_dry = True
+
     # -------------------------------------
     # Read in data
     # -------------------------------------
@@ -1061,16 +1078,20 @@ if __name__ == '__main__':
     #   make sure that the wavelength range is large enough so the tails of the distribution are not cut off!
     ceil_lambda_range = np.arange(ceil_lambda - 40e-09, ceil_lambda + 40e-09, 1e-09)
 
-    # create dry size distribution [m]
-    step = 0.005
-    r_md_micron = np.arange(0.000 + step, 5.000 + step, step)
+    # create dry size distribution [microns], [m]
+    step_micron = 0.005
+    r_md_micron = np.arange(0.000 + step_micron, 5.000 + step_micron, step_micron)
     r_md = r_md_micron * 1.0e-06
+
+    # create an array to store the _Q_dry_murk values
+    Q_dry_murk = np.empty((len(ceil_lambda_range), len(r_md), 12))
+    Q_dry_murk[:] = np.nan
 
     for lambda_idx, lambda_i in enumerate(ceil_lambda_range):
 
         # calculate Q_dry for each aerosol, and for murk given the relative volume of each aerosol species
-        Q_dry_aer, Q_dry_murk = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_md,
-                                                                  averageType=average_up)
+        Q_dry_murk[lambda_idx, :, :] = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_md,
+                                                         averageType=average_up)
 
     # create guassian weighted Q_dry_murk across the wavelengths to make one for the main ceilometer wavelength
     Q_dry_murk_lambda_weighted = gaussian_weighted_Q_dry_murk(Q_dry_murk, ceil_lambda_range, ceil_lambda)
@@ -1078,6 +1099,41 @@ if __name__ == '__main__':
     # create a guassian weighted Q_dry_murk across a range of radii for each value in the radii range.
     #   need to do this as Q_dry_murk is extremely sensitive to radii, and small changes in radii = large changes in
     #   optical properties!
+
+
+    # calculate log of the radius
+    log10_r_md = np.log10(r_md)
+
+    # store water vapour mass absorption for the different wavelengths [np.array]
+    # store gaussian weights for plot [list]
+    convex_weights = []
+    Q_dry_murk_lambda_radii_weighted = np.empty(Q_dry_murk_lambda_weighted.shape)
+    Q_dry_murk_lambda_radii_weighted[:] = np.nan
+
+    # convert geometric standard deviation (1.6: Harrison et al 2012, Warren et al. paper 1) to the standard deviation
+    stdev_r_md = np.log10(1.6*1e-06)
+
+    for log10_r_md_idx, log10_r_md_i in enumerate(log10_r_md):
+
+        # # make a small range of log_r_md for the weights to be calulate from, for this instance of log10_r_md_i
+        # #   make sure the range is wide enough for the tails of the gaussian are not missed!
+        # extend = np.log10(2.0e-06)
+        # min_r = log10_r_md_i - extend
+        # max_r = log10_r_md_i + extend
+        # step = (max_r - min_r)/100.0
+        # log10_r_md_range = np.arange(min_r, max_r, step)
+
+        # calculate P(radii) for the main (mean) radii (log10_r_md_i) across a radii range
+        weights = np.array([eu.normpdf(i, log10_r_md_i, stdev_r_md) for i in log10_r_md])
+
+        # modify weights so they add up to 1
+        # convex combination - https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Convex_combination_example
+        convex_weights_i = weights/np.sum(weights)
+        convex_weights += [convex_weights_i]
+
+        # 1) apply the weights across the different radii of Q_dry_murk_lambda_weighted to find Q_ext_dry for this radii
+        # 2) sum up the weighted Q_dry_murk, across all the wavelengths, to get the final guassian weighted Q_dry_murk
+        Q_dry_murk_lambda_radii_weighted[log10_r_md_idx, :] = np.sum(convex_weights_i[None, :, None] * Q_dry_murk_lambda_weighted, axis=1)
 
 
 
@@ -1121,10 +1177,18 @@ if __name__ == '__main__':
         stacked_monthly_bar_rel_aerosol_vol(pm10_rel_vol, pm10_mass_merged, savedir, site_ins)
 
         # line plot of Q_ext,dry
-        lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir)
+        lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, extra='')
 
         # line plot of Q_ext,dry as a ratio of the average
         lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir)
+
+        if weight_Q_ext_dry == True:
+
+            # MURK line plot with the weighted wavelength
+            lineplot_monthly_MURK(Q_dry_murk_lambda_weighted, pm10_mass_merged, site_ins, savedir, extra='wavelength_weighted')
+
+            # line plot of Q_ext,dry as a ratio of the average
+            lineplot_ratio_monthly_MURK(Q_dry_murk_lambda_weighted, pm10_mass_merged, site_ins, savedir, extra='wavelength_weighted')
 
     elif average_up == 'total':
 
