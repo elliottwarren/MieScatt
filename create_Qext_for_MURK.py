@@ -12,6 +12,7 @@ from pymiecoated import Mie
 import matplotlib.pyplot as plt
 import datetime as dt
 import ellUtils as eu
+import pickle
 
 from dateutil import tz
 
@@ -141,7 +142,7 @@ def part_file_read(particle):
     Locate and read the particle file. STore wavelength, n and k parts in dictionary
     """
 
-    print 'Reading particle ...' + particle
+    # print 'Reading particle ...' + particle
 
     from numpy import array
 
@@ -401,6 +402,118 @@ def total_average_mass(mass, aer_particles):
         mass_avg[aer_i] = np.array(mass_avg[aer_i])
 
     return mass_avg, mass_avg_n
+
+def individual_monthly_stats(pm10_mass_merged, input_species):
+
+    """
+    Create monthly statistics for the pm10_merged_mass_data
+    :param pm10_mass_merged:
+    :param input_species:
+    :return: stats
+    """
+
+    # set up stats dictionary
+    stats = {}
+    for species in input_species:
+        stats[species] = {'binned': [], 'mean': [], 'median': [], 'stdev': [], '25pct': [], '75pct': []}
+
+    start = pm10_mass_merged['time'][0]
+    end = pm10_mass_merged['time'][-1]
+
+    for year_i in range(start.year, end.year + 1):
+
+        # define month range for this year
+        if year_i == start.year:
+            month_range = range(start.month, 13)
+        elif year_i == end.year:
+            month_range = range(1, end.month + 1)
+        else:
+            month_range = range(1, 13)
+
+
+        for month_i in month_range:
+
+            # get location of time period's data
+            bool = np.array([True if (i.year == year_i) & (i.month == month_i)
+                             else False for i in pm10_mass_merged['time']])
+
+            for species in input_species:
+
+                # extract data
+                subsample = pm10_mass_merged[species][bool]
+
+                stats[species]['binned'] += [subsample]
+                stats[species]['mean'] += [np.nanmean(subsample)]
+                stats[species]['stdev'] += [np.nanstd(subsample)]
+                stats[species]['median'] += [np.nanmedian(subsample)]
+                stats[species]['25pct'] += [np.nanpercentile(subsample, 25)]
+                stats[species]['75pct'] += [np.nanpercentile(subsample, 75)]
+
+
+    # turn all lists into np.arrays
+    for species in input_species:
+        for key in stats[species].iterkeys():
+            stats[species][key] = np.array(stats[species][key])
+
+    return stats
+
+def monthly_stats(pm10_mass_merged, input_species):
+
+    """
+    Create monthly statistics for the pm10_merged_mass_data
+    :param pm10_mass_merged:
+    :param input_species:
+    :return: stats
+    """
+
+    # set up stats dictionary
+    mean_stats = {}
+    for species in input_species:
+        mean_stats[species] = {}
+        for month_i in range(1, 13):
+
+            # get month name and create empty list ready for appending
+            month_name = dt.date(1900, month_i, 1).strftime('%b')
+            mean_stats[species][month_name] = []
+
+
+    start = pm10_mass_merged['time'][0]
+    end = pm10_mass_merged['time'][-1]
+
+    for year_i in range(start.year, end.year + 1):
+
+        # define month range for this year
+        if year_i == start.year:
+            month_range = range(start.month, 13)
+        elif year_i == end.year:
+            month_range = range(1, end.month + 1)
+        else:
+            month_range = range(1, 13)
+
+
+        for month_i in (month_range):
+
+            # get location of time period's data
+            bool = np.array([True if (i.year == year_i) & (i.month == month_i)
+                             else False for i in pm10_mass_merged['time']])
+
+            # get month name
+            month_name = dt.date(1900, month_i, 1).strftime('%b')
+
+            for species in input_species:
+
+                # extract data
+                subsample = pm10_mass_merged[species][bool]
+
+                mean_stats[species][month_name] += [np.nanmean(subsample)]
+
+
+    # turn all lists into np.arrays
+    for species in input_species:
+        for key in mean_stats[species].iterkeys():
+            mean_stats[species][key] = np.array(mean_stats[species][key])
+
+    return mean_stats
 
 def calculate_aerosol_moles_masses(mass, outputGases=False, **kwargs):
 
@@ -679,7 +792,7 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageTyp
                 n_aerosol[aer_i], _ = linear_interpolate_n(long_name, ceil_lambda)
 
 
-        print 'Read and linearly interpolated aerosols!'
+        # print 'Read and linearly interpolated aerosols!'
 
         return n_aerosol
 
@@ -1093,19 +1206,20 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # Setup
 
+    # site information
+    # site_ins = {'site_short':'NK', 'site_long': 'North Kensington',
+    #             'ceil_lambda': 0.905e-06, 'land-type': 'urban'}
+    site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton',
+                'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
+    # site_ins = {'site_short':'Ha', 'site_long': 'Harwell',
+    #             'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
+
     # directories
     savedir = '/home/nerc/Documents/MieScatt/figures/Q_ext_monthly/'
     datadir = '/home/nerc/Documents/MieScatt/data/monthly_masses/'
     csvsavedir = '/home/nerc/Documents/MieScatt/data/Q_ext/'
     barchartsavedir = '/home/nerc/Documents/MieScatt/figures/Q_ext_monthly/barcharts/'
-
-    # site information
-    site_ins = {'site_short':'NK', 'site_long': 'North Kensington',
-                'ceil_lambda': 0.905e-06, 'land-type': 'urban'}
-    # site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton',
-    #             'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
-    # site_ins = {'site_short':'Ha', 'site_long': 'Harwell',
-    #             'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
+    pickledir = '/home/nerc/Documents/MieScatt/data/pickle/' + site_ins['site_long'] + '/'
 
     # wavelength
     ceil_lambda = site_ins['ceil_lambda'] # [m]
@@ -1127,6 +1241,7 @@ if __name__ == '__main__':
                    'CORG': [0.05, 0.9, 0.4], 'NaCl': 'magenta', 'CBLK':'brown'}
     ERG_colours = {'NH4': 'orange', 'SO4': 'red', 'NO3': 'blue',
                    'CORG': '#00ff00', 'Na': '#33ccff', 'CL': '#cc0099', 'CBLK':'black'}
+
 
     # # aerosol with relative volume - average from the 4 Haywood et al 2008 flights
     # rel_vol = {'Ammonium sulphate': 0.295,
@@ -1192,11 +1307,11 @@ if __name__ == '__main__':
 
     # merge pm10 mass data together and average up to a common time resolution defined by timeRes [grams m-3]
     #   which will be the new 'raw data' time
-    pm10_mass_merged = time_match_pm_masses(pm10_mass_in, pm10_oc_bc_in, timeRes, nanMissingRow=True)
+    pm10_mass_merged = time_match_pm_masses(pm10_mass_in, pm10_oc_bc_in, timeRes, nanMissingRow=False)
 
     # calculate aerosol moles and masses from the gas and aerosol input data [moles], [g m-3]
     # pm10_moles, pm10_mass = calculate_aerosol_moles_masses(pm10_mass_merged)
-    pm10_moles, pm10_mass = calculate_aerosol_moles_masses(pm10_mass_merged, outputGases=True,
+    pm10_moles, pm10_mass = calculate_aerosol_moles_masses(pm10_mass_merged, outputGases=False,
                                                            aer_particles=aer_particles)
 
     # to be used with the gases
@@ -1207,8 +1322,14 @@ if __name__ == '__main__':
     # average up data once more for the final MURK calculations
     if average_up == 'monthly':
         # monthly average the mass
-        # pm10_mass_avg, pm10_mass_avg_n = monthly_averaging_mass(pm10_mass, aer_particles)
-        pm10_mass_avg, pm10_mass_avg_n = monthly_averaging_mass(pm10_mass_merged, input_species)
+        pm10_mass_avg, pm10_mass_avg_n = monthly_averaging_mass(pm10_mass, aer_particles)
+        # pm10_mass_avg, pm10_mass_avg_n = monthly_averaging_mass(pm10_mass_merged, input_species)
+
+        # create stats for each month separately from the pm10_mass_merged data
+        stats = individual_monthly_stats(pm10_mass_merged, input_species)
+
+        # means for each month
+        mean_stats = monthly_stats(pm10_mass_merged, input_species)
 
 
     elif average_up == 'total':
@@ -1217,7 +1338,7 @@ if __name__ == '__main__':
 
 
     # rel mass of averaged data
-    pm10_avg_mass, pm10_rel_avg_mass = calc_rel_mass(pm10_mass_avg, input_species)
+    # pm10_avg_mass, pm10_rel_avg_mass = calc_rel_mass(pm10_mass_avg, input_species)
 
     # calculate the volume mixing ratio [m3_aerosol m-3_air]
     #     and relative volume [fraction] for each of the aerosol species
@@ -1244,6 +1365,9 @@ if __name__ == '__main__':
     Q_dry_murk[:] = np.nan
 
     for lambda_idx, lambda_i in enumerate(ceil_lambda_range):
+
+        # current progress
+        print 'Q_dry_murk: '+ str(lambda_idx+1) +' of ' + str(len(ceil_lambda_range))
 
         # calculate Q_dry for each aerosol, and for murk given the relative volume of each aerosol species
         Q_dry_murk[lambda_idx, :, :] = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_md,
@@ -1291,6 +1415,13 @@ if __name__ == '__main__':
     else:
         raise ValueError('savedata == True but average_up is not "monthly" or "total"!')
 
+    # save the relative volume of aerosol for making f(RH) curves in pickle form!
+    #   "I'm a pickle!"
+    pickle_save = {'pm10_rel_vol': pm10_rel_vol}
+    with open(pickledir +site_ins['site_short']+'_aerosol_relative_volume.pickle', 'wb') as handle:
+        pickle.dump(pickle_save, handle)
+
+
     # -----------------------------------------------
     # Plotting
     # -----------------------------------------------
@@ -1308,7 +1439,26 @@ if __name__ == '__main__':
         lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_md_micron, extra='')
 
         # line plot of Q_ext,dry as a ratio of the average
-        lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, r_md_micron, savedir, extra='')
+        lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, r_md_micron, savedir, extra='tester')
+
+        # # TIMESERIES - S - stats (the one with many months)
+        # # plot daily statistics of S
+        # fig, ax = plt.subplots(1,1,figsize=(8, 5))
+        # for species in input_species:
+        #     ax.plot(stats[species]['median'], color=ERG_colours[species], label=species)
+        #     ax.plot(stats[species]['25pct'], linestyle='--', color=ERG_colours[species])
+        #     ax.plot(stats[species]['75pct'], linestyle='--', color=ERG_colours[species])
+        #     # ax.fill_between(range(len(stats[species]['mean'])), stats[species]['mean'] - stats[species]['stdev'], stats[species]['mean'] + stats[species]['stdev'], alpha=0.3) #  facecolor='blue'
+        # plt.legend()
+        # plt.suptitle('relative mass, binned by month')
+        # # plt.xlabel('Date [dd/mm]')
+        # # plt.ylim([20.0, 60.0])
+        # # ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
+        # plt.ylabel('Lidar Ratio')
+        # plt.savefig(savedir + 'relative_species/' + 'S_'+year+'_'+site_ins['site_short']+'_'+process_type+'_'+Geisinger_str+'_dailybinned_'+ceil_lambda_str_nm+'.png')
+        # # plt.savefig(savedir + 'S_'+year+'_'+process_type+'_'+Geisinger_str+'_dailybinned_lt60_'+ceil_lambda_str_nm+'.png')
+        # plt.close(fig)
+
 
         # quick plot the guassian weights to check they are ok
         # if weight_Q_ext_dry == True:
