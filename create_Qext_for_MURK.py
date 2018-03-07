@@ -1010,6 +1010,79 @@ def stacked_monthly_bar_rel_aerosol_vol(pm_rel_vol, pm_mass_merged, savedir, sit
 
     return fig
 
+def stacked_monthly_bar_rel_aerosol_vol_sorted(pm_rel_vol, pm_mass_merged, savedir, site_ins, aer_particles):
+
+    """
+    Plot the SORTED relative amount of each aerosol, across the months in a stacked bar chart with a legend.
+
+    :param pm_rel_vol:
+    :param pm_mass_merged:
+    :param savedir:
+    :param site_ins:
+    :param aer_particles: aerosol particles in a list to help the plotting order
+    :return: fig
+    """
+
+
+    # 1 figure per species and site
+    for aer_main, rel_vol_aer_main in pm_rel_vol.iteritems():
+
+        # pm_rel_vol = pm10_rel_vol
+        # pm_mass_merged = pm10_mass_merged
+
+        fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+
+        # where to put the bottom of the bar chart, start at 0 and then move it up with each aer_i iteration
+        bottom = np.zeros(12)
+
+        index = np.arange(12)
+        width = 1.0
+
+        # idx position - sorts smallest to largest by default so [::-1] reverses it to be largest to smallest
+        idx_sort = np.argsort(rel_vol_aer_main)[::-1]
+
+        # plot the main aerosol first, then loop through all the others
+        plt.bar(index, rel_vol_aer_main[idx_sort], bottom=bottom, width=width, color=aer_colours[aer_main], label=aer_main)
+
+        # move the bottom of the bar location up, for the next iteration
+        bottom = bottom + rel_vol_aer_main[idx_sort]
+
+        # loop through the ordered list so the plotting order, after aer_main, is the same each time
+        for aer_i in aer_particles:
+
+            # extract data for this aerosol
+            rel_vol_aer_i = pm_rel_vol[aer_i]
+
+            # if it's a new aerosol...
+            if aer_i != aer_main:
+
+                plt.bar(index, rel_vol_aer_i[idx_sort], bottom=bottom, width=width, color=aer_colours[aer_i], label=aer_i)
+
+                # move the bottom of the bar location up, for the next iteration
+                bottom = bottom + rel_vol_aer_i[idx_sort]
+
+
+        plt.xlabel('month')
+        plt.xticks(index+width/2.0, [dt.datetime(1900, i+1, 1).strftime('%b') for i in idx_sort])
+        plt.ylabel('fraction')
+        plt.ylim([0.0, 1.0])
+        plt.legend(loc='best', fontsize = 8, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
+
+        plt.tight_layout(h_pad=0.1)
+        plt.subplots_adjust(top=0.9, right=0.8)
+
+
+        # date for plotting
+        title_date_range = pm_mass_merged['time'][0].strftime('%Y/%m/%d') + ' - ' + pm_mass_merged['time'][-1].strftime('%Y/%m/%d')
+        plt.suptitle(site_ins['site_long'] + ': ' + title_date_range + '; sorted rel vol: ' + aer_main)
+
+        save_date_range = pm_mass_merged['time'][0].strftime('%Y%m%d') + '-' + pm_mass_merged['time'][-1].strftime('%Y%m%d')
+        plt.savefig(savedir + 'ranked_species/rel_vol_' + aer_main + '_' +site_ins['site_short'] + '_' + save_date_range)
+
+        plt.close(fig)
+
+    return fig
+
 def stacked_monthly_bar_rel_species(pm_rel, pm_mass_merged, dataType, savedir, site_ins, colours):
 
     """
@@ -1209,10 +1282,10 @@ if __name__ == '__main__':
     # site information
     # site_ins = {'site_short':'NK', 'site_long': 'North Kensington',
     #             'ceil_lambda': 0.905e-06, 'land-type': 'urban'}
-    site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton',
-                'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
-    # site_ins = {'site_short':'Ha', 'site_long': 'Harwell',
+    # site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton',
     #             'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
+    site_ins = {'site_short':'Ha', 'site_long': 'Harwell',
+                'ceil_lambda': 0.905e-06, 'land-type': 'rural'}
 
     # directories
     savedir = '/home/nerc/Documents/MieScatt/figures/Q_ext_monthly/'
@@ -1338,11 +1411,18 @@ if __name__ == '__main__':
 
 
     # rel mass of averaged data
-    # pm10_avg_mass, pm10_rel_avg_mass = calc_rel_mass(pm10_mass_avg, input_species)
+    # pm10_avg_mass, pm10_rel_avg_mass = calc_rel_mass(pm10_mass_avg, input_species) # gases and inputs
+    # pm10_avg_mass, pm10_rel_avg_mass = calc_rel_mass(pm10_mass_avg, aer_particles) # final aerosol
 
     # calculate the volume mixing ratio [m3_aerosol m-3_air]
     #     and relative volume [fraction] for each of the aerosol species
     pm10_vol_mix, pm10_rel_vol = calc_vol_and_rel_vol(pm10_mass_avg, aer_particles, aer_density)
+
+    # Rank and reorder the relative volume of species
+    # pm10_ranked_rel_vol = rank_rel_vol
+
+
+
 
 
     # -----------------------------------------------
@@ -1432,8 +1512,11 @@ if __name__ == '__main__':
         # https://matplotlib.org/1.3.1/examples/pylab_examples/bar_stacked.html use to improve x axis
         stacked_monthly_bar_rel_aerosol_vol(pm10_rel_vol, pm10_mass_merged, barchartsavedir, site_ins)
 
-        # barchart for species
-        stacked_monthly_bar_rel_species(pm10_rel_avg_mass, pm10_mass_merged, 'Relative mass concentration', barchartsavedir, site_ins, ERG_colours)
+        # barchart - for relative volume of each species (sorted)
+        stacked_monthly_bar_rel_aerosol_vol_sorted(pm10_rel_vol, pm10_mass_merged, barchartsavedir, site_ins, aer_particles)
+
+        # barchart for mass of input species
+        # stacked_monthly_bar_rel_species(pm10_rel_avg_mass, pm10_mass_merged, 'Relative mass concentration', barchartsavedir, site_ins, ERG_colours)
 
         # line plot of Q_ext,dry
         lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_md_micron, extra='')
