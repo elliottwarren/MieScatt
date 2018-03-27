@@ -12,6 +12,7 @@ import numpy as np
 from pymiecoated import Mie
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+from matplotlib import cm
 
 import ellUtils as eu
 
@@ -402,31 +403,37 @@ def plot_ratio(r_md_microm, Q_ratio, ceil_lambda, ceil_lambda_str, aer_plot_orde
 
     """Plot the absolute Q_dry_ext values"""
 
+
+
+    # plot the data as a set of 3 x 2 subplots - 1 subplot per aerosol
     fig, ax = plt.subplots(3, 2, figsize=(8, 7))
 
     # For 895 - 915 nm
-    # # lam_colours = create_colours(len(ceil_lambda) -1)
-    # lam_colours = create_colours(len(ceil_lambda))
-    #
-    # for ax_i, aer_i in zip(ax.flatten(), aer_plot_order):
-    #
-    #     for lam_i, lam_i_colour in zip(ceil_lambda_str, lam_colours):
-    #
-    #         ax_i.semilogx(r_md_microm, Q_ratio[aer_i][lam_i], label=lam_i + ' nm', color=lam_i_colour)
-    #         ax_i.set_xlim([0.05, 10.0])
-    #         ax_i.set_ylim([0.7, 1.4])
-
+    cmap_range = cm.coolwarm(np.linspace(0, 1, len(ceil_lambda)))
 
     for ax_i, aer_i in zip(ax.flatten(), aer_plot_order):
 
-        ax_i.axhline(y=1, linestyle='--', color='green', alpha=0.5)
-        ax_i.semilogx(r_md_microm, Q_ratio[aer_i]['1064'])
-        ax_i.set_xlim([0.05, 10.0])
-        ax_i.set_ylim([0.4, 2.0])
+        for lam_i, cmap_range_i in zip(ceil_lambda_str, cmap_range):
+
+            ax_i.semilogx(r_md_microm, Q_ratio[aer_i][lam_i], label=lam_i + ' nm', color=cmap_range_i)
+            ax_i.set_xlim([0.05, 10.0])
+            ax_i.set_ylim([0.7, 1.4])
 
         # subplot prettify
         ax_i.set_title(aer_names[aer_i], fontsize=12)
         ax_i.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+
+    # for 905 vs 1064 nm
+    # for ax_i, aer_i in zip(ax.flatten(), aer_plot_order):
+    #
+    #     ax_i.axhline(y=1, linestyle='--', color='green', alpha=0.5)
+    #     ax_i.semilogx(r_md_microm, Q_ratio[aer_i]['1064'])
+    #     ax_i.set_xlim([0.05, 10.0])
+    #     ax_i.set_ylim([0.4, 2.0])
+    #
+        # # subplot prettify
+        # ax_i.set_title(aer_names[aer_i], fontsize=12)
+        # ax_i.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
 
 
@@ -434,18 +441,19 @@ def plot_ratio(r_md_microm, Q_ratio, ceil_lambda, ceil_lambda_str, aer_plot_orde
     ax_main = eu.fig_majorAxis(fig)
 
     ax_main.set_xlabel(r'$r_{md} \/\mathrm{[\mu m]}$', fontsize=16, labelpad=5)
-    ax_main.set_ylabel(r'$\frac{Q_{ext,dry}(\lambda=1064\/nm)}{Q_{ext,dry}(\lambda=905\/nm)}$', labelpad=15, fontsize=19)
-    #    ax_main.set_ylabel(r'$\frac{Q_{ext,dry}(\lambda=i)}{Q_{ext,dry}(\lambda=905\/nm)}$', labelpad=15, fontsize=19)
-    # ax.flatten()[1].legend(fontsize=9, bbox_to_anchor=(1.07, 1), loc=2, borderaxespad=0.0)
+    # ax_main.set_ylabel(r'$\frac{Q_{ext,dry}(\lambda=1064\/nm)}{Q_{ext,dry}(\lambda=905\/nm)}$', labelpad=15, fontsize=19)
+    ax_main.set_ylabel(r'$\frac{Q_{ext,dry}(\lambda=i)}{Q_{ext,dry}(\lambda=905\/nm)}$', labelpad=15, fontsize=19)
+    ax.flatten()[1].legend(fontsize=9, bbox_to_anchor=(1.07, 1), loc=2, borderaxespad=0.0)
     # fig.suptitle('Ratio (lam_i / lam_905)')
 
     plt.tight_layout(h_pad=0.1)
     plt.subplots_adjust(top=0.9, right=0.8)
 
-    plt.savefig(savedir + 'Q_extdry_multiLam_ratio_sensitivity_10micronscale_1064-905'+extra+'.png')
+    # plt.savefig(savedir + 'Q_extdry_multiLam_ratio_sensitivity_10micronscale_1064-905'+extra+'.png')
+    plt.savefig(savedir + 'Q_extdry_multiLam_ratio_sensitivity_10micronscale_895-915'+extra+'.png')
     plt.close()
 
-def main():
+if __name__ == '__main__':
 
 
     # -------------------------------------------------------------------
@@ -454,18 +462,18 @@ def main():
     # setup
     # ceil_lambda = [0.91e-06] # [m]
     # ceil_lambda = np.arange(0.69e-06, 1.19e-06, 0.05e-06) # [m]
-    # ceil_lambda = np.arange(8.95e-07, 9.16e-07, 1.0e-09) # [m]
-    ceil_lambda = np.array([905e-09, 1064e-09])
+    ceil_lambda = np.arange(8.95e-07, 9.16e-07, 1.0e-09) # [m]
+    # ceil_lambda = np.array([905e-09, 1064e-09]) # [m]
 
     # work around, Issues with rounding errors when conv from int or float to str.
-    #ceil_lambda_str = ['895','896', '897','898','899','900','901','902','903','904','905','906','907',
-    #                   '908','909','910','911','912','913','914','915']
+    ceil_lambda_str = ['895','896', '897','898','899','900','901','902','903','904','905','906','907',
+                       '908','909','910','911','912','913','914','915']
     # ceil_lambda_str = ['%d' % i for i in ceil_lambda]
-    ceil_lambda_str = ['905', '1064']
+    #ceil_lambda_str = ['905', '1064']
 
 
-    # extra =''
-    extra = '_largelam'
+    extra =''
+    # extra = '_largelam'
 
     # directories
     savedir = '/home/nerc/Documents/MieScatt/figures/'
@@ -479,7 +487,7 @@ def main():
     # all the aerosol types
     # all_aer = ['ammonium_sulphate', 'ammonium_nitrate', 'organic_carbon', 'oceanic', 'biogenic', 'NaCl', 'soot']
     aer_names = {'ammonium_sulphate': 'Ammonium sulphate', 'ammonium_nitrate': 'Ammonium nitrate',
-                'organic_carbon': 'Organic carbon', 'NaCl': 'Generic NaCl', 'soot':'Soot', 'MURK': 'MURK'}
+                'organic_carbon': 'Organic carbon', 'NaCl': 'Generic NaCl', 'soot':'Black carbon', 'MURK': 'MURK'}
     # all_aer = {'ammonium_sulphate': 'red', 'ammonium_nitrate':'orange', 'organic_carbon': 'green',
     #            'biogenic': 'cyan', 'NaCl': 'magenta', 'soot': 'brown'}
     all_aer = {'ammonium_sulphate': 'red', 'ammonium_nitrate':'orange', 'organic_carbon': 'green',
@@ -590,7 +598,5 @@ def main():
 
     print 'END PROGRAM'
 
-if __name__ == '__main__':
-    main()
 
 
