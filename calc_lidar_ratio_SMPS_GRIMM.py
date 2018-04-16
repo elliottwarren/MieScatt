@@ -1,5 +1,5 @@
 """
-Read in mass, number distribution and RH data from Chilbolton to calculate the Lidar Ratio (S) [sr]. Uses the interpolation
+Read in mass, number distribution and RH data from a site (e.g. Chilbolton) to calculate the Lidar Ratio (S) [sr]. Uses the interpolation
 method from Geisinger et al., 2018 to increase the number of diameter bins and reduce the issue of high sensitivity of S to
 diameter (the discussion version of Geisinger et al., 2018 is clearer and more elaborate than the final
 published version!). Can swell and dry particles from the number distribution (follows the CLASSIC aerosol scheme)!
@@ -175,7 +175,7 @@ def read_PM1_mass_data(massdatadir, year):
 
     return mass, qaqc_idx_unique
 
-def read_PM_mass_data(massdatadir, site_ins, pmtype, year):
+def read_PM_mass_data(massdatadir, site_meta, pmtype, year):
 
     """
     Read in PM2.5 mass data from NK
@@ -186,7 +186,7 @@ def read_PM_mass_data(massdatadir, site_ins, pmtype, year):
     :return qaqc_idx_unique: unique index list where any of the main species observations are missing
     """
 
-    massfname = pmtype+'species_Hr_'+site_ins['site_long']+'_DEFRA_'+year+'.csv'
+    massfname = pmtype+'species_Hr_'+site_meta['site_long']+'_DEFRA_'+year+'.csv'
     massfilepath = massdatadir + massfname
     massrawData = np.genfromtxt(massfilepath, delimiter=',', dtype="|S20") # includes the header
 
@@ -253,7 +253,7 @@ def read_PM_mass_data(massdatadir, site_ins, pmtype, year):
 
     return mass, qaqc_idx_unique
 
-def read_EC_BC_mass_data(massdatadir, site_ins, pmtype, year):
+def read_EC_BC_mass_data(massdatadir, site_meta, pmtype, year):
 
     """
     Read in the elemental carbon (EC) and organic carbon (OC) mass data from NK
@@ -268,7 +268,7 @@ def read_EC_BC_mass_data(massdatadir, site_ins, pmtype, year):
     # make sure year is string
     year = str(year)
 
-    massfname = pmtype+'_OC_EC_Daily_'+site_ins['site_long']+'_DEFRA_'+year+'.csv'
+    massfname = pmtype+'_OC_EC_Daily_'+site_meta['site_long']+'_DEFRA_'+year+'.csv'
     massfilepath = massdatadir + massfname
     massrawData = np.genfromtxt(massfilepath, delimiter=',', skip_header=4, dtype="|S20") # includes the header
 
@@ -298,7 +298,7 @@ def read_EC_BC_mass_data(massdatadir, site_ins, pmtype, year):
 
     return mass
 
-def read_pm10_mass_data(massdatadir, site_ins, year):
+def read_pm10_mass_data(massdatadir, site_meta, year):
 
     """
     Read in the other pm10 mass data from NK
@@ -311,7 +311,7 @@ def read_pm10_mass_data(massdatadir, site_ins, year):
     # make sure year is string
     year = str(year)
 
-    massfname = 'pm10species_Hr_'+site_ins['site_long']+'_DEFRA_'+year+'.csv'
+    massfname = 'pm10species_Hr_'+site_meta['site_long']+'_DEFRA_'+year+'.csv'
     massfilepath = massdatadir + massfname
     massrawData = np.genfromtxt(massfilepath, delimiter=',', skip_header=4, dtype="|S20") # includes the header
 
@@ -1719,11 +1719,11 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
     return optics
 
 # saving
-def pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, outputSave=False, **kwargs):
+def pickle_optics_save(site_meta, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, outputSave=False, **kwargs):
 
     """
     Save the calculated optical properties, given that they can easily take 3+ hours to compute
-    :param site_ins:
+    :param site_meta:
     :param optics:
     :param datadir:
     :param savestr:
@@ -1733,10 +1733,10 @@ def pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambd
     :return:
     """
 
-    pickle_save = {'site_ins':site_ins, 'optics': optics}
+    pickle_save = {'site_meta':site_meta, 'optics': optics}
     if kwargs is not None:
         pickle_save.update(kwargs)
-    with open(pickledir +savestr+'_'+savesub+'_'+site_ins['period']+'_'+ceil_lambda_str_nm+'.pickle', 'wb') as handle:
+    with open(pickledir +savestr+'_'+savesub+'_'+site_meta['period']+'_'+ceil_lambda_str_nm+'.pickle', 'wb') as handle:
         pickle.dump(pickle_save, handle)
 
     if outputSave == True:
@@ -1760,10 +1760,13 @@ if __name__ == '__main__':
     # ==============================================================================
 
     # site information
-    site_ins = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
-            'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
+    # site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
+    #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
+    
+    site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
+        'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
 
-    period = site_ins['period']
+    period = site_meta['period']
 
     # use PM1 or pm10 data?
     process_type = 'pm10-2p5'
@@ -1791,7 +1794,7 @@ if __name__ == '__main__':
     n_samples = 4.0
 
     # wavelength to aim for (in a list! e.g. [905e-06])
-    ceil_lambda = [site_ins['ceil_lambda']]
+    ceil_lambda = [site_meta['ceil_lambda']]
     # ceil_lambda = [0.532e-06]
     ceil_lambda_str_nm = str(ceil_lambda[0] * 1.0e09) + 'nm'
 
@@ -1800,8 +1803,8 @@ if __name__ == '__main__':
 
     # directories
     maindir = '/home/nerc/Documents/MieScatt/'
-    datadir = '/home/nerc/Documents/MieScatt/data/' + site_ins['site_long'] + '/'
-    pickledir = '/home/nerc/Documents/MieScatt/data/pickle/' + site_ins['site_long'] + '/'
+    datadir = '/home/nerc/Documents/MieScatt/data/' + site_meta['site_long'] + '/'
+    pickledir = '/home/nerc/Documents/MieScatt/data/pickle/' + site_meta['site_long'] + '/'
 
     # save dir
     if Geisinger_subsample_flag == 1:
@@ -1822,13 +1825,13 @@ if __name__ == '__main__':
     picklesave = True
 
     # site and instruments used to help with file saves
-    savestr = site_ins['site_short'] + '_' + '_'.join(site_ins['instruments'])
+    savestr = site_meta['site_short'] + '_' + '_'.join(site_meta['instruments'])
 
     # RH data
     #wxt_inst_site = 'WXT_KSSW'
 
     # data year
-    year = site_ins['period']
+    year = site_meta['period']
 
     # resolution to average data to (in minutes! e.g. 60)
     timeRes = 60
@@ -1870,16 +1873,16 @@ if __name__ == '__main__':
     # Read data
     # ==============================================================================
 
-    # # read in any pickled S data from before
-    filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
-    with open(filename, 'rb') as handle:
-        pickle_load_in = pickle.load(handle)
-
-    optics = pickle_load_in['optics']
-    S = optics['S']
-    met = pickle_load_in['met']
-    N_weight_pm10 = pickle_load_in['N_weight']
-    pm10_mass = pickle_load_in['pm10_mass']
+    # # # read in any pickled S data from before
+    # filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
+    # with open(filename, 'rb') as handle:
+    #     pickle_load_in = pickle.load(handle)
+    # 
+    # optics = pickle_load_in['optics']
+    # S = optics['S']
+    # met = pickle_load_in['met']
+    # N_weight_pm10 = pickle_load_in['N_weight']
+    # pm10_mass = pickle_load_in['pm10_mass']
 
 
     # read in the complex index of refraction data for the aerosol species (can include water)
@@ -1902,7 +1905,7 @@ if __name__ == '__main__':
     # --------------------------------------------
     print 'Reading in data...'
 
-    if site_ins['period'] == 'ClearfLo':
+    if site_meta['period'] == 'ClearfLo':
 
         # read in clearflo winter number distribution
         # created on main PC space with calc_plot_N_r_obs.py
@@ -1925,7 +1928,7 @@ if __name__ == '__main__':
         r_d_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
         r_d_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
 
-    if (site_ins['site_long'] == 'Chilbolton') & (year == '2016'):
+    if (site_meta['site_long'] == 'Chilbolton') & (year == '2016'):
 
         # read in number distribution and RH from pickled data
         filename = datadir + 'N_hourly_Ch_SMPS_GRIMM.pickle'
@@ -1962,16 +1965,16 @@ if __name__ == '__main__':
     if 'pm2p5' in pm_vars:
 
         # Read in the PM2.5 data [grams m-3]
-        pm2p5_mass_in, _ = read_PM_mass_data(massdatadir, site_ins, 'PM2p5', year)
+        pm2p5_mass_in, _ = read_PM_mass_data(massdatadir, site_meta, 'PM2p5', year)
 
 
     if 'pm10' in pm_vars:
 
         # Read in the hourly other pm10 data [grams m-3]
-        pm10_mass_in, _ = read_PM_mass_data(massdatadir, site_ins, 'PM10', year)
+        pm10_mass_in, _ = read_PM_mass_data(massdatadir, site_meta, 'PM10', year)
 
         # Read in the daily EC and OC data [grams m-3]
-        pm10_oc_bc_in = read_EC_BC_mass_data(massdatadir, site_ins, 'PM10', year)
+        pm10_oc_bc_in = read_EC_BC_mass_data(massdatadir, site_meta, 'PM10', year)
 
         # linearly interpolate daily data to hourly
         pm10_oc_bc_in = oc_bc_interp_hourly(pm10_oc_bc_in)
@@ -1981,7 +1984,7 @@ if __name__ == '__main__':
 
 
     ## Read in meteorological data
-    if (site_ins['site_long'] == 'Chilbolton') & (year == '2016'):
+    if (site_meta['site_long'] == 'Chilbolton') & (year == '2016'):
 
         # RH, Tair and pressure data was bundled with the dN data, so extract out here to make it clearly separate.
         met_in = {'time': dN_in['time'], 'RH': dN_in['RH'], 'Tair': dN_in['Tair'], 'pressure': dN_in['pressure']}
@@ -2162,7 +2165,7 @@ if __name__ == '__main__':
     # save the output data encase it needs to be used again (pickle!)
     #   calculating the lidar ratio for 1 year can take 3-6 hours (depending on len(D))
     if picklesave == True:
-        pickle_save = pickle_optics_save(site_ins, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
+        pickle_save = pickle_optics_save(site_meta, optics, pickledir, savestr, savesub, ceil_lambda_str_nm, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda)
 
 
@@ -2203,7 +2206,7 @@ if __name__ == '__main__':
     # plt.ylim([20.0, 60.0])
     ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
     plt.ylabel('Lidar Ratio')
-    plt.savefig(savedir + 'S_'+year+'_'+site_ins['site_short']+'_'+process_type+'_'+Geisinger_str+'_dailybinned_'+ceil_lambda_str_nm+'.png')
+    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_dailybinned_'+ceil_lambda_str_nm+'.png')
     # plt.savefig(savedir + 'S_'+year+'_'+process_type+'_'+Geisinger_str+'_dailybinned_lt60_'+ceil_lambda_str_nm+'.png')
     plt.close(fig)
 
@@ -2218,18 +2221,18 @@ if __name__ == '__main__':
     plt.suptitle('Lidar Ratio:\n'+savesub+' masses; equal Number weighting per rbin; ClearfLo winter N(r)')
     plt.xlabel('Lidar Ratio')
     plt.ylabel('Frequency')
-    plt.savefig(savedir + 'S_'+year+'_'+site_ins['site_short']+'_'+process_type+'_'+Geisinger_str+'_histogram_'+ceil_lambda_str_nm+'.png')
+    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_histogram_'+ceil_lambda_str_nm+'.png')
     plt.close(fig)
 
     # TIMESERIES - S - not binned
     # plot all the S in raw form (plot_date)
     fig, ax = plt.subplots(1,1,figsize=(8, 5))
     ax.plot_date(met['time'], S, fmt='-')
-    plt.suptitle('Lidar Ratio:'+savesub+'\n masses; equal Number weighting per rbin; '+savestr + ' ' + site_ins['period'])
+    plt.suptitle('Lidar Ratio:'+savesub+'\n masses; equal Number weighting per rbin; '+savestr + ' ' + site_meta['period'])
     plt.xlabel('Date [dd/mm]')
     ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
     plt.ylabel('Lidar Ratio [sr]')
-    plt.savefig(savedir + 'S_'+year+'_'+site_ins['site_short']+'_'+process_type+'_'+Geisinger_str+'_timeseries_'+ceil_lambda_str_nm+'.png')
+    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_timeseries_'+ceil_lambda_str_nm+'.png')
     plt.close(fig)
 
     # Pearson and Spearman correlation
@@ -2256,7 +2259,7 @@ if __name__ == '__main__':
     plt.ylim([10.0, 80.0])
     plt.xlim([20.0, 110.0])
     plt.tight_layout()
-    plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_ins['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
+    plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
     plt.close(fig)
 
     # ------------------------------------------------
