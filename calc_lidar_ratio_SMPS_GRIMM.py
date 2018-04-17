@@ -1,5 +1,5 @@
 """
-Read in mass, number distribution and RH data from a site (e.g. Chilbolton) to calculate the Lidar Ratio (S) [sr]. Uses the interpolation
+Read in mass, number distribution, RH, T and pressure data from a site (e.g. Chilbolton) to calculate the Lidar Ratio (S) [sr]. Uses the interpolation
 method from Geisinger et al., 2018 to increase the number of diameter bins and reduce the issue of high sensitivity of S to
 diameter (the discussion version of Geisinger et al., 2018 is clearer and more elaborate than the final
 published version!). Can swell and dry particles from the number distribution (follows the CLASSIC aerosol scheme)!
@@ -118,6 +118,21 @@ def read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True):
 
     return n_species
 
+def read_organic_carbon_growth_factors(ffoc_gfdir):
+
+    """
+    Read in the organic carbon growth factors
+    :param ffoc_gfdir:
+    :return: gf_ffoc [dictionary: GF = growth factor and RH_frac = RH fraction]:
+    """
+
+    gf_ffoc_raw = eu.csv_read(ffoc_gfdir + 'GF_fossilFuelOC_calcS.csv')
+    gf_ffoc_raw = np.array(gf_ffoc_raw)[1:, :] # skip header
+    gf_ffoc = {'RH_frac': np.array(gf_ffoc_raw[:, 0], dtype=float),
+                'GF': np.array(gf_ffoc_raw[:, 1], dtype=float)}
+
+    return gf_ffoc
+
 def read_PM1_mass_data(massdatadir, year):
 
     """
@@ -176,6 +191,84 @@ def read_PM1_mass_data(massdatadir, year):
     return mass, qaqc_idx_unique
 
 def read_PM_mass_data(massdatadir, site_meta, pmtype, year):
+
+    """
+    Read in PM2.5 mass data from NK
+    Raw data is micrograms m-3 but converted to and outputed as grams m-3
+    :param year:
+    :param pmtype: what type of pm to read in, that is in the filename (e.g. pm10, pm2p5)
+    :return: mass
+    :return qaqc_idx_unique: unique index list where any of the main species observations are missing
+    """
+
+    massfname = pmtype+'species_Hr_'+site_meta['site_long']+'_DEFRA_'+year+'.csv'
+    massfilepath = massdatadir + massfname
+    massrawData = np.genfromtxt(massfilepath, delimiter=',', dtype="|S20") # includes the header
+
+    # extract and process time, converting from time ending GMT to time ending UTC
+
+    from_zone = tz.gettz('GMT')
+    to_zone = tz.gettz('UTC')
+
+    # replace 24:00:00 with 00:00:00, then add 1 onto the day to compensate
+    #   datetime can't handle the hours = 24 (doesn't round the day up).
+    rawtime = [i[0] + ' ' + i[1].replace('24:00:00', '00:00:00') for i in massrawData[5:]]
+    pro_time = np.array([dt.datetime.strptime(i, '%d/%m/%Y %H:%M:%S') for i in rawtime])
+    idx = [True if i.hour == 0 else False for i in pro_time]
+    pro_time[idx] = pro_time[idx] + dt.timedelta(days=1)
+
+    # convert from 'tme end GMT' to 'time end UTC'
+    pro_time = [i.replace(tzinfo=from_zone) for i in pro_time] # set datetime's original timezone as GMT
+    pro_time = np.array([i.astimezone(to_zone) for i in pro_time]) # convert from GMT to UTC
+
+    mass = {'time': pro_time}
+
+    # get headers without the site part of it (S04-PM2.5 to S04) and remove any trailing spaces
+    headers = [i.split('-')[0] for i in massrawData[4]]
+    headers = [i.replace(' ', '') for i in headers]
+
+    # ignore first entry, as that is the date&time
+    for h, header_site in enumerate(headers):
+
+        # # get the main part of the header from the
+        # split = header_site.split('-')
+        # header = split[0]
+
+        if header_site == 'CL': # (what will be salt)
+            # turn '' into 0.0, as missing values can be when there simply wasn't any salt recorded,
+            # convert from micrograms to grams
+            mass[header_site] = np.array([0.0 if i[h] == 'No data' else i[h] for i in massrawData[5:]], dtype=float) * 1e-06
+
+        elif header_site in ['NH4', 'SO4', 'NO3', 'Na']: # if not CL but one of the main gases needed for processing
+            # turn '' into nans
+            # convert from micrograms to grams
+            mass[header_site] = np.array([np.nan if i[h] == 'No data' else i[h] for i in massrawData[5:]], dtype=float) * 1e-06
+
+
+    # QAQC - turn all negative values in each column into nans if one of them is negative
+    qaqc_idx = {}
+    for header_i in headers:
+
+        # store bool if it is one of the major pm consituents, so OM10 and OC/BC pm10 data can be removed too
+        if header_i in ['NH4', 'NO3', 'SO4', 'CORG', 'Na', 'CL', 'CBLK']:
+
+            bools = np.logical_or(mass[header_i] < 0.0, np.isnan(mass[header_i]))
+
+            qaqc_idx[header_i] = np.where(bools == True)[0]
+
+
+            # turn all values in the row negative
+            for header_j in headers:
+                if header_j not in ['Date', 'Time', 'Status']:
+                    mass[header_j][bools] = np.nan
+
+    # find unique instances of missing data
+    qaqc_idx_unique = np.unique(np.hstack(qaqc_idx.values()))
+
+
+    return mass, qaqc_idx_unique
+
+def read_PM_mass_data_multiple_years(massdatadir, site_meta, pmtype, years):
 
     """
     Read in PM2.5 mass data from NK
@@ -1747,14 +1840,6 @@ def pickle_optics_save(site_meta, optics, pickledir, savestr, savesub, ceil_lamb
 # def main():
 if __name__ == '__main__':
 
-    # Read in the mass data for 2016
-    # Read in RH data for 2016
-    # convert gases and such into the aerosol particles
-    # swell/dry the particles based on the CLASSIC scheme stuff
-    # use Mie code to calculate the backscatter and extinction
-    # calculate lidar ratio
-    # plot lidar ratio
-
     # ==============================================================================
     # Setup
     # ==============================================================================
@@ -1769,10 +1854,12 @@ if __name__ == '__main__':
     period = site_meta['period']
 
     # use PM1 or pm10 data?
-    process_type = 'pm10-2p5'
+    # process_type = 'pm10-2p5' # Ch
+    process_type = 'pm10'
 
     # which PM vars to read in (linked to the process type)
-    pm_vars = ['pm2p5', 'pm10']
+    # pm_vars = ['pm2p5', 'pm10'] #Ch
+    pm_vars = ['pm10']
 
     # soot or no soot? (1 = 'withSoot' or 0 = 'noSoot')
     soot_flag = 1
@@ -1795,7 +1882,6 @@ if __name__ == '__main__':
 
     # wavelength to aim for (in a list! e.g. [905e-06])
     ceil_lambda = [site_meta['ceil_lambda']]
-    # ceil_lambda = [0.532e-06]
     ceil_lambda_str_nm = str(ceil_lambda[0] * 1.0e09) + 'nm'
 
     # string for saving figures and choosing subdirectories
@@ -1808,7 +1894,6 @@ if __name__ == '__main__':
 
     # save dir
     if Geisinger_subsample_flag == 1:
-        # savesubdir = savesub + '/geisingersample_2xdN_for_2lowestAPSbins/'
         savesubdir = savesub
     else:
         savesubdir = savesub
@@ -1830,12 +1915,11 @@ if __name__ == '__main__':
     # RH data
     #wxt_inst_site = 'WXT_KSSW'
 
-    # data year
-    year = site_meta['period']
+    # data years
+    years = [2014, 2015, 2016]
 
     # resolution to average data to (in minutes! e.g. 60)
     timeRes = 60
-
 
     # aerosol particles to calculate (OC = Organic carbon, CBLK = black carbon, both already measured)
     # match dictionary keys further down
@@ -1869,41 +1953,31 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    # ==============================================================================
-    # Read data
-    # ==============================================================================
+    # ============================================
+    # Pickle read in
+    # ============================================
+
+    print 'Reading in data...'
 
     # # # read in any pickled S data from before
     # filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
-    # 
+    #
     # optics = pickle_load_in['optics']
     # S = optics['S']
     # met = pickle_load_in['met']
     # N_weight_pm10 = pickle_load_in['N_weight']
     # pm10_mass = pickle_load_in['pm10_mass']
 
+    for year in years:
 
-    # read in the complex index of refraction data for the aerosol species (can include water)
-    n_species = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
+    # ============================================
+    # Read in number distribution and RH data
+    # ============================================
 
-    # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
-    gf_ffoc_raw = eu.csv_read(ffoc_gfdir + 'GF_fossilFuelOC_calcS.csv')
-    gf_ffoc_raw = np.array(gf_ffoc_raw)[1:, :] # skip header
-    gf_ffoc = {'RH_frac': np.array(gf_ffoc_raw[:, 0], dtype=float),
-                'GF': np.array(gf_ffoc_raw[:, 1], dtype=float)}
-
-    # # Read WXT data
-    # wxtfilepath = wxtdatadir + wxt_inst_site + '_' + year + '_15min.nc'
-    # RH_in = eu.netCDF_read(wxtfilepath, vars=['RH', 'Tair','press', 'time'])
-    # RH_in['RH_frac'] = WXT_in['RH'] * 0.01
-    # RH_in['time'] -= dt.timedelta(minutes=15) # change time from 'obs end' to 'start of obs', same as the other datasets
-
-
-    ## Read in number distribution and RH data
-    # --------------------------------------------
-    print 'Reading in data...'
+    # Data needs to be prepared in calc.plot_N_r_obs.py on windows machine, and saved in pickle form to read it in here.
+    #  D, dD, logD... dNdlogD, dN ... etc.
 
     if site_meta['period'] == 'ClearfLo':
 
@@ -1928,7 +2002,13 @@ if __name__ == '__main__':
         r_d_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
         r_d_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
 
-    if (site_meta['site_long'] == 'Chilbolton') & (year == '2016'):
+    if (site_meta['site_long'] == 'North_Kensington') & (site_meta['period'] == 'long_term'):
+
+        # Read in NK long term data 2014 - 2016 inclusively
+
+
+
+    if (site_meta['site_long'] == 'Chilbolton') & (site_meta['period'] == '2016'):
 
         # read in number distribution and RH from pickled data
         filename = datadir + 'N_hourly_Ch_SMPS_GRIMM.pickle'
@@ -1944,6 +2024,8 @@ if __name__ == '__main__':
         r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
         r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
 
+
+
     # interpolated r values to from the Geisinger et al 2017 approach
     # will increase the number of r bins to (number of r bins * n_samples)
     R_dg_microns, dN_in = Geisinger_increase_r_bins(dN_in, r_orig_bins_microns, n_samples=n_samples)
@@ -1958,6 +2040,24 @@ if __name__ == '__main__':
     else:
         r_microns = r_d_orig_bins_microns
         r_m = r_d_orig_bins_m
+
+    # ==============================================================================
+    # Read GF and meteorological data
+    # ==============================================================================
+
+
+    # read in the complex index of refraction data for the aerosol species (can include water)
+    n_species = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
+
+    # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
+    gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir)
+
+
+    # # Read WXT data
+    # wxtfilepath = wxtdatadir + wxt_inst_site + '_' + year + '_15min.nc'
+    # RH_in = eu.netCDF_read(wxtfilepath, vars=['RH', 'Tair','press', 'time'])
+    # RH_in['RH_frac'] = WXT_in['RH'] * 0.01
+    # RH_in['time'] -= dt.timedelta(minutes=15) # change time from 'obs end' to 'start of obs', same as the other datasets
 
     ## Read in species by mass data
     # -----------------------------------------
@@ -2114,45 +2214,35 @@ if __name__ == '__main__':
 
     # Calculate the number concentration now that we know the dry radii
         # find relative N from N(mass, r_md)
-    num_conc = {}
-    for aer_i in aer_particles:
 
 
-        # Estimated number for the species, from the main distribution data, using the weighting,
-        #    for each time step.
-        # num_conc[aer_i].shape = (time, number of ORIGINAL bins) -
-        #    not then number of bins from geisinger interpolation
+    # Estimated number for the species, from the main distribution data, using the weighting,
+    #    for each time step.
+    # num_conc[aer_i].shape = (time, number of ORIGINAL bins) -
+    #    not then number of bins from geisinger interpolation
 
-        # multiply a 2D array (dN) by a 1D array N_weight_pm10[aer_i]
-        num_conc[aer_i] = dN['dN'] * N_weight_pm10[aer_i][:, None]
+    # multiply a 2D array (dN) by a 1D array N_weight_pm10[aer_i]
 
+
+    num_conc = {aer_i: dN['dN'] * N_weight_pm10[aer_i][:, None] for aer_i in aer_particles}
 
     # -----------------------------------------------------------
 
-    # caulate the physical growth factor for the particles (swollen radii / dry radii)
-    GF = {}
-    for aer_i in aer_particles: # aer_particles:
-
-        # physical growth factor
-        GF[aer_i] = r_md_microns[aer_i] / r_d_microns[aer_i]
-
+    # Caulate the physical growth factor (GF) for the particles (swollen radii / dry radii)
+    GF = {aer_i: r_md_microns[aer_i] / r_d_microns[aer_i] for aer_i in aer_particles}
 
     # --------------------------------------------------------------
 
     # calculate n_wet for each rbin (complex refractive index of dry aerosol and water based on physical growth)
-    #   follows CLASSIC scheme
-    n_wet = {}
-
-    for aer_i in aer_particles: # aer_particles:
-
-        # physical growth factor
-        n_wet[aer_i] = (n_species[aer_i] / (GF[aer_i] ** 3.0)) + (n_species['H2O'] * (1 - (1/(GF[aer_i] ** 3.0))))
+    #   follows CLASSIC scheme parameterisation
+    n_wet = {aer_i: (n_species[aer_i] / (GF[aer_i] ** 3.0)) + (n_species['H2O'] * (1 - (1/(GF[aer_i] ** 3.0))))
+             for aer_i in aer_particles}
 
     # --------------------------
 
     print 'calculating optical properties...'
+    # The main beast. Calculate all the optical properties, and outputs the lidar ratio
     if Geisinger_subsample_flag == 0:
-        # The main beast. Calculate all the optical properties, and outputs the lidar ratio
         optics = calculate_lidar_ratio(aer_particles, met['time'], ceil_lambda, r_md_m,  n_wet, num_conc)
     else:
         optics = calculate_lidar_ratio_geisinger(aer_particles, met['time'], ceil_lambda, r_md_m,  n_wet, num_conc,
