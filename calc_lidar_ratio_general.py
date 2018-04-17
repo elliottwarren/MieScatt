@@ -268,84 +268,6 @@ def read_PM_mass_data(massdatadir, site_meta, pmtype, year):
 
     return mass, qaqc_idx_unique
 
-def read_PM_mass_data_multiple_years(massdatadir, site_meta, pmtype, years):
-
-    """
-    Read in PM2.5 mass data from NK
-    Raw data is micrograms m-3 but converted to and outputed as grams m-3
-    :param year:
-    :param pmtype: what type of pm to read in, that is in the filename (e.g. pm10, pm2p5)
-    :return: mass
-    :return qaqc_idx_unique: unique index list where any of the main species observations are missing
-    """
-
-    massfname = pmtype+'species_Hr_'+site_meta['site_long']+'_DEFRA_'+year+'.csv'
-    massfilepath = massdatadir + massfname
-    massrawData = np.genfromtxt(massfilepath, delimiter=',', dtype="|S20") # includes the header
-
-    # extract and process time, converting from time ending GMT to time ending UTC
-
-    from_zone = tz.gettz('GMT')
-    to_zone = tz.gettz('UTC')
-
-    # replace 24:00:00 with 00:00:00, then add 1 onto the day to compensate
-    #   datetime can't handle the hours = 24 (doesn't round the day up).
-    rawtime = [i[0] + ' ' + i[1].replace('24:00:00', '00:00:00') for i in massrawData[5:]]
-    pro_time = np.array([dt.datetime.strptime(i, '%d/%m/%Y %H:%M:%S') for i in rawtime])
-    idx = [True if i.hour == 0 else False for i in pro_time]
-    pro_time[idx] = pro_time[idx] + dt.timedelta(days=1)
-
-    # convert from 'tme end GMT' to 'time end UTC'
-    pro_time = [i.replace(tzinfo=from_zone) for i in pro_time] # set datetime's original timezone as GMT
-    pro_time = np.array([i.astimezone(to_zone) for i in pro_time]) # convert from GMT to UTC
-
-    mass = {'time': pro_time}
-
-    # get headers without the site part of it (S04-PM2.5 to S04) and remove any trailing spaces
-    headers = [i.split('-')[0] for i in massrawData[4]]
-    headers = [i.replace(' ', '') for i in headers]
-
-    # ignore first entry, as that is the date&time
-    for h, header_site in enumerate(headers):
-
-        # # get the main part of the header from the
-        # split = header_site.split('-')
-        # header = split[0]
-
-        if header_site == 'CL': # (what will be salt)
-            # turn '' into 0.0, as missing values can be when there simply wasn't any salt recorded,
-            # convert from micrograms to grams
-            mass[header_site] = np.array([0.0 if i[h] == 'No data' else i[h] for i in massrawData[5:]], dtype=float) * 1e-06
-
-        elif header_site in ['NH4', 'SO4', 'NO3', 'Na']: # if not CL but one of the main gases needed for processing
-            # turn '' into nans
-            # convert from micrograms to grams
-            mass[header_site] = np.array([np.nan if i[h] == 'No data' else i[h] for i in massrawData[5:]], dtype=float) * 1e-06
-
-
-    # QAQC - turn all negative values in each column into nans if one of them is negative
-    qaqc_idx = {}
-    for header_i in headers:
-
-        # store bool if it is one of the major pm consituents, so OM10 and OC/BC pm10 data can be removed too
-        if header_i in ['NH4', 'NO3', 'SO4', 'CORG', 'Na', 'CL', 'CBLK']:
-
-            bools = np.logical_or(mass[header_i] < 0.0, np.isnan(mass[header_i]))
-
-            qaqc_idx[header_i] = np.where(bools == True)[0]
-
-
-            # turn all values in the row negative
-            for header_j in headers:
-                if header_j not in ['Date', 'Time', 'Status']:
-                    mass[header_j][bools] = np.nan
-
-    # find unique instances of missing data
-    qaqc_idx_unique = np.unique(np.hstack(qaqc_idx.values()))
-
-
-    return mass, qaqc_idx_unique
-
 def read_EC_BC_mass_data(massdatadir, site_meta, pmtype, year):
 
     """
@@ -986,7 +908,7 @@ def convert_mass_to_kg_kg(mass, met):
 
     #
     T_K = met['Tair'] # [K]
-    p_Pa = met['pressure'] # [Pa]
+    p_Pa = met['press'] # [Pa]
 
     # density of air [kg m-3] # assumes dry air atm
     # p = rho * R * T [K]
@@ -1848,8 +1770,9 @@ if __name__ == '__main__':
     # site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
     #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
     
+    # NK: 2014 - 2016 inclusively
     site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-        'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
+        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
 
     period = site_meta['period']
 
@@ -1970,10 +1893,11 @@ if __name__ == '__main__':
     # N_weight_pm10 = pickle_load_in['N_weight']
     # pm10_mass = pickle_load_in['pm10_mass']
 
-    for year in years:
+    # for year in years:
+    year = 2014
 
     # ============================================
-    # Read in number distribution and RH data
+    # Read in number distribution
     # ============================================
 
     # Data needs to be prepared in calc.plot_N_r_obs.py on windows machine, and saved in pickle form to read it in here.
@@ -2005,7 +1929,7 @@ if __name__ == '__main__':
     if (site_meta['site_long'] == 'North_Kensington') & (site_meta['period'] == 'long_term'):
 
         # Read in NK long term data 2014 - 2016 inclusively
-
+        flag=1
 
 
     if (site_meta['site_long'] == 'Chilbolton') & (site_meta['period'] == '2016'):
@@ -2025,7 +1949,6 @@ if __name__ == '__main__':
         r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
 
 
-
     # interpolated r values to from the Geisinger et al 2017 approach
     # will increase the number of r bins to (number of r bins * n_samples)
     R_dg_microns, dN_in = Geisinger_increase_r_bins(dN_in, r_orig_bins_microns, n_samples=n_samples)
@@ -2042,9 +1965,30 @@ if __name__ == '__main__':
         r_m = r_d_orig_bins_m
 
     # ==============================================================================
-    # Read GF and meteorological data
+    # Read meteorological data
     # ==============================================================================
 
+    if (site_meta['site_long'] == 'Chilbolton') & (year == '2016'):
+
+        # RH, Tair and pressure data was bundled with the dN data, so extract out here to make it clearly separate.
+        met_in = {'time': dN_in['time'], 'RH': dN_in['RH'], 'Tair': dN_in['Tair'], 'press': dN_in['press']}
+
+        if 'RH_frac' not in met_in:
+            met_in['RH_frac'] = met_in['RH'] * 0.01
+
+
+    if (site_meta['site_long'] == 'North_Kensington') & (site_meta['period'] == 'long_term'):
+
+        wxtfilepath = datadir + 'KSSW_' + year + '_15min.nc'
+        met_in = eu.netCDF_read(wxtfilepath, vars=['RH', 'Tair','press', 'time'])
+        met_in['RH_frac'] = met_in['RH'] * 0.01
+        # Change time from 'obs end' to 'start of obs', same as the other datasets
+        met_in['time'] -= dt.timedelta(minutes=15)
+
+
+    # ==============================================================================
+    # Read GF and complex index of refraction data
+    # ==============================================================================
 
     # read in the complex index of refraction data for the aerosol species (can include water)
     n_species = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
@@ -2052,12 +1996,6 @@ if __name__ == '__main__':
     # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
     gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir)
 
-
-    # # Read WXT data
-    # wxtfilepath = wxtdatadir + wxt_inst_site + '_' + year + '_15min.nc'
-    # RH_in = eu.netCDF_read(wxtfilepath, vars=['RH', 'Tair','press', 'time'])
-    # RH_in['RH_frac'] = WXT_in['RH'] * 0.01
-    # RH_in['time'] -= dt.timedelta(minutes=15) # change time from 'obs end' to 'start of obs', same as the other datasets
 
     ## Read in species by mass data
     # -----------------------------------------
@@ -2081,16 +2019,6 @@ if __name__ == '__main__':
 
         # merge the pm10 data together and used RH to do it. RH and pm10 merged datasets will be in sync.
         pm10_mass_in = merge_pm_mass(pm10_mass_in, pm10_oc_bc_in)
-
-
-    ## Read in meteorological data
-    if (site_meta['site_long'] == 'Chilbolton') & (year == '2016'):
-
-        # RH, Tair and pressure data was bundled with the dN data, so extract out here to make it clearly separate.
-        met_in = {'time': dN_in['time'], 'RH': dN_in['RH'], 'Tair': dN_in['Tair'], 'pressure': dN_in['pressure']}
-
-        if 'RH_frac' not in met_in:
-            met_in['RH_frac'] = met_in['RH']/100.0
 
 
     # ==============================================================================
