@@ -2242,6 +2242,9 @@ if __name__ == '__main__':
 
     pm10_mass, met, dN = time_match_pm_met_dN(pm10_mass_cut, met_in, dN_in, timeRes)
 
+    # free up some memory
+    del dN_in, met_in, pm10_mass_in, pm10_oc_bc_in
+
     # ==============================================================================
     # Main processing and calculations
     # ==============================================================================
@@ -2318,6 +2321,11 @@ if __name__ == '__main__':
     # Dry particles
     r_d_smps_microns, r_d_smps_m = calc_r_d_all(r_md_smps_microns, met, pm10_mass, gf_ffoc)
 
+    # change array types
+    for var in [r_md_aps_microns, r_md_aps_m, r_d_smps_microns, r_d_smps_m]:
+        for key in var.iterkeys():
+            var[key].dtype = np.float16
+
     # -----------------------------------------------------------
 
     # combine the dried SMPS to the constant GRIMM data together, then the constant wet SMPS to the wet GRIMM data.
@@ -2330,6 +2338,7 @@ if __name__ == '__main__':
     r_md_m = {}
 
     for aer_i in aer_particles:
+        print aer_i
         r_d_microns[aer_i] = np.hstack((r_d_smps_microns[aer_i], r_d_aps_microns_dup))
         r_d_m[aer_i] = np.hstack((r_d_smps_m[aer_i], r_d_aps_m_dup))
 
