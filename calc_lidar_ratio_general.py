@@ -1486,9 +1486,10 @@ def calc_r_md_species(r_d_microns, met, aer_i):
     # ------ efflorescence to deliquescence ----------#
 
     # calculate r_md for the deliquescence rh - used in linear interpolation
+    # r_md at deliquescence point (used in interpolation)
     r_md_del = calc_r_md_t(r_d_microns, rh_del, alpha_factor)
 
-    # all values that need to have some linear interpolation
+    # idx for all values that need to have some linear interpolation
     bool = np.logical_and(met['RH_frac'] >= rh_eff, met['RH_frac'] <= rh_del)
     rh_bet_eff_del = np.where(bool == True)[0]
 
@@ -1532,6 +1533,8 @@ def calc_r_d_all(r_microns, met, pm_mass, gf_ffoc):
     Currently just works for ammonium sulphate, ammonium nitrate and NaCl
     04/12/17 - works for range of r values, not just a scaler.
     """
+
+    #r_microns = r_md_aps_microns # testing
 
     # set up dictionary
     r_d = {}
@@ -1698,7 +1701,7 @@ def calc_r_d_species(r_microns, met, aer_i):
     # ------ efflorescence to deliquescence ----------#
 
     # calculate r_d for the deliquescence rh - used in linear interpolation
-    r_d_del = calc_r_d_t(r_microns, rh_del, alpha_factor)
+    r_d_del = calc_r_d_t(r_microns, rh_del, alpha_factor) # what dry size would be, if RH = deliquesence RH
 
     # all values that need to have some linear interpolation
     bool = np.logical_and(met['RH_frac'] >= rh_eff, met['RH_frac'] <= rh_del)
@@ -1725,7 +1728,74 @@ def calc_r_d_species(r_microns, met, aer_i):
     frac_dup = np.tile(frac, (len(r_microns), 1)).transpose()
 
     # calculate interpolated values for r_md
-    r_d[rh_bet_eff_del, :] = low_r_d + (frac_dup * abs_diff_r_md_dup)
+    r_d[rh_bet_eff_del, :] = up_r_md - (frac_dup * abs_diff_r_md_dup)
+
+
+
+    ## R_M CODE ASA REFERENCE
+    # # calculate r_md for the deliquescence rh - used in linear interpolation
+    # # r_md at deliquescence point (used in interpolation)
+    # r_md_del = calc_r_md_t(r_d_microns, rh_del, alpha_factor)
+    #
+    # # idx for all values that need to have some linear interpolation
+    # bool = np.logical_and(met['RH_frac'] >= rh_eff, met['RH_frac'] <= rh_del)
+    # rh_bet_eff_del = np.where(bool == True)[0]
+    #
+    # # between efflorescence point and deliquescence point, r_md is expected to value linearly between the two
+    # low_rh = rh_eff
+    # up_rh = rh_del
+    # low_r_md = r_d_microns
+    # up_r_md = r_md_del
+    #
+    # diff_rh = up_rh - low_rh
+    # diff_r_md = r_md_del - r_d_microns
+    # abs_diff_r_md = abs(diff_r_md)
+    #
+    # # find distance rh is along linear interpolation [fraction] from lower limit
+    # # frac = np.empty(len(r_md))
+    # # frac[:] = np.nan
+    # frac = ((met['RH_frac'][rh_bet_eff_del] - low_rh) / diff_rh)
+    #
+    # # duplicate abs_diff_r_md by the number of instances needing to be interpolated - helps the calculation below
+    # #   of r_md = ...low + (frac * abs diff)
+    # abs_diff_r_md_dup = np.tile(abs_diff_r_md, (len(rh_bet_eff_del), 1))
+    # frac_dup = np.tile(frac, (len(r_d_microns), 1)).transpose()
+    #
+    # # calculate interpolated values for r_md
+    # r_md[rh_bet_eff_del, :] = low_r_md + (frac_dup * abs_diff_r_md_dup)
+
+
+
+    ## ORIG R_MD
+    # # calculate r_d for the deliquescence rh - used in linear interpolation
+    # r_d_del = calc_r_d_t(r_microns, rh_del, alpha_factor)
+    #
+    # # all values that need to have some linear interpolation
+    # bool = np.logical_and(met['RH_frac'] >= rh_eff, met['RH_frac'] <= rh_del)
+    # rh_bet_eff_del = np.where(bool == True)[0]
+    #
+    # # between efflorescence point and deliquescence point, r_md is expected to value linearly between the two
+    # low_rh = rh_eff
+    # up_rh = rh_del
+    # up_r_md = r_microns
+    # low_r_d = r_d_del
+    #
+    # diff_rh = up_rh - low_rh
+    # diff_r_md = r_microns - r_d_del
+    # abs_diff_r_md = abs(diff_r_md)
+    #
+    # # find distance rh is along linear interpolation [fraction] from lower limit
+    # # frac = np.empty(len(r_md))
+    # # frac[:] = np.nan
+    # frac = ((met['RH_frac'][rh_bet_eff_del] - low_rh) / diff_rh)
+    #
+    # # duplicate abs_diff_r_md by the number of instances needing to be interpolated - helps the calculation below
+    # #   of r_md = ...low + (frac * abs diff)
+    # abs_diff_r_md_dup = np.tile(abs_diff_r_md, (len(rh_bet_eff_del), 1))
+    # frac_dup = np.tile(frac, (len(r_microns), 1)).transpose()
+    #
+    # # calculate interpolated values for r_md
+    # r_d[rh_bet_eff_del, :] = low_r_d + (frac_dup * abs_diff_r_md_dup)
 
     return r_d
 
@@ -2009,6 +2079,30 @@ def pickle_optics_save(pickle_savename, optics, outputSave=False, **kwargs):
     else:
         return
 
+def numpy_optics_save(np_savename, optics, outputSave=False, **kwargs):
+
+    """
+    Save the calculated optical properties, given that they can easily take 3+ hours to compute
+    :param np_savename:
+    :param optics:
+    :param pickledir:
+    :param outputSave:
+    :param kwargs:
+    :return:
+    """
+
+    np_save = {'site_meta':site_meta, 'optics': optics}
+    if kwargs is not None:
+        np_save.update(kwargs)
+
+    # with open(np_savename, 'wb') as handle:
+    #     pickle.dump(pickle_save, handle)
+
+    if outputSave == True:
+        return pickle_save
+    else:
+        return
+
 # def main():
 if __name__ == '__main__':
 
@@ -2126,7 +2220,7 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2015'
+    year = '2014'
     year_str = str(year)
 
     # ============================================
@@ -2135,23 +2229,23 @@ if __name__ == '__main__':
 
     print 'Reading in data...'
 
-    # # read in any pickled S data from before
-    filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
-    with open(filename, 'rb') as handle:
-        pickle_load_in = pickle.load(handle)
-
-    optics = pickle_load_in['optics']
-    S = optics['S']
-    met = pickle_load_in['met']
-    N_weight_pm10 = pickle_load_in['N_weight']
-    pm10_mass = pickle_load_in['pm10_mass']
-
-    key = 'NaCl'
-    a = ~np.isnan(N_weight_pm10[key])
-    data = N_weight_pm10[key][a]
-    plt.hist(data, bins=50)
-    plt.suptitle(key + ' ' + year_str)
-    plt.savefig(savedir + 'rel_'+key+'_'+year_str+'.png')
+    # # # read in any pickled S data from before
+    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
+    # with open(filename, 'rb') as handle:
+    #     pickle_load_in = pickle.load(handle)
+    #
+    # optics = pickle_load_in['optics']
+    # S = optics['S']
+    # met = pickle_load_in['met']
+    # N_weight_pm10 = pickle_load_in['N_weight']
+    # pm10_mass = pickle_load_in['pm10_mass']
+    #
+    # key = 'NaCl'
+    # a = ~np.isnan(N_weight_pm10[key])
+    # data = N_weight_pm10[key][a]
+    # plt.hist(data, bins=50)
+    # plt.suptitle(key + ' ' + year_str)
+    # plt.savefig(savedir + 'rel_'+key+'_'+year_str+'.png')
 
     # ------------------------------------------------------
 
@@ -2596,8 +2690,9 @@ if __name__ == '__main__':
     # corr = spearmanr(met['RH'], S) <- erronous value!!!! (https://github.com/scipy/scipy/issues/6530)
     # r_str = '%.2f' % corr[0]
     fig, ax = plt.subplots(1,1,figsize=(8, 4))
+    key = 'CBLK'
     scat = ax.scatter(met['RH'], S)
-    scat = ax.scatter(met['RH'], S, c=N_weight_pm10['NaCl']*100.0, vmin= 0.0, vmax = 40.0)
+    scat = ax.scatter(met['RH'], S, c=N_weight_pm10[key]*100.0, vmin= 0.0, vmax = 25.0)
     cbar = plt.colorbar(scat, ax=ax)
     # cbar.set_label('Soot [%]', labelpad=-20, y=1.1, rotation=0)
     cbar.set_label('[%]', labelpad=-20, y=1.1, rotation=0)
@@ -2607,22 +2702,50 @@ if __name__ == '__main__':
     plt.xlim([20.0, 110.0])
     plt.tight_layout()
     # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
-    plt.savefig(savedir + 'S_vs_RH_NK_2015_NaCl.png')
+    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'.png')
     plt.close(fig)
 
     # ------------------------------------------------
 
     # LINE - wet and dry diameters
+
+    idx = np.where(met['RH'] >= 0.0)
+
     fig = plt.figure()
     colours = ['red', 'blue', 'green', 'black', 'purple']
     for i, aer_i in enumerate(aer_particles):
-        # plt.semilogy(np.nanmean(r_d_m[aer_i], axis=0), color=colours[i], linestyle = '-', label=aer_i + ' dry')
-        plt.semilogy(np.nanmean(r_md_m[aer_i], axis=0), color=colours[i], linestyle='--', label=aer_i + ' wet')
+
+        plt.semilogy(np.nanmean(r_d_m[aer_i][idx], axis=0), color=colours[i], linestyle = '-', label=aer_i + ' dry')
+        plt.semilogy(np.nanmean(r_md_m[aer_i][idx], axis=0), color=colours[i], linestyle='--', label=aer_i + ' wet')
     plt.legend(loc='best')
 
     #plot original dry and wet radii
 
+    # ------------------------------------------------
 
+    # SCATTER - DIAG - wet and dry diameters
+
+    bool = met['RH'] >= 0.0
+
+    fig = plt.figure()
+    colours = ['red', 'blue', 'green', 'black', 'purple']
+    for i, aer_i in enumerate(aer_particles): #enumerate(['NaCl']): # enumerate(['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG']): # #enumerate(['NaCl']):
+        ax = plt.gca()
+
+        # scatter does not work well here due to needing a log scale! Known bug in python:
+        #      # https://github.com/matplotlib/matplotlib/issues/6915
+        # allow auto scaling to log by plt.plot()
+        #plt.plot(met['RH'][bool], r_md_m[aer_i][bool, 20], color=colours[i], linewidth=0, marker='o', label=aer_i + ' wet')
+        plt.plot(met['RH'][bool], r_d_m[aer_i][bool, 300], color=colours[i], linewidth=0, marker='o', label=aer_i + ' dry')
+        #ax.axis('tight')
+
+
+
+        #ax.set_ylim([np.nanmin(r_md_m[aer_i][bool, 20]), np.nanmax(r_md_m[aer_i][bool, 20])])
+    plt.legend(loc='best')
+
+    # broken aps welling is below
+    # broken_r_d_m = deepcopy(r_d_m)
 
     # ------------------------------------------------
 
