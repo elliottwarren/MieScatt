@@ -15,7 +15,6 @@ variable [units]
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import pickle
-from copy import deepcopy
 import os
 
 import numpy as np
@@ -978,6 +977,9 @@ def time_match_pm_met_dN(pm10_mass_in, met_in, dN_in, timeRes):
     bad_uni = np.unique(np.array(bad))
 
     for var in [pm10_mass, met, dN]:
+
+    #pm10_mass = set_nan_across_obs(pm10_mass, bad_uni)
+
 
         for key, data in var.iteritems():
 
@@ -2099,7 +2101,7 @@ def numpy_optics_save(np_savename, optics, outputSave=False, **kwargs):
     #     pickle.dump(pickle_save, handle)
 
     if outputSave == True:
-        return pickle_save
+        return np_save
     else:
         return
 
@@ -2111,12 +2113,12 @@ if __name__ == '__main__':
     # ==============================================================================
 
     # site information
-    # site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
-    #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
+    site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
+            'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
     
-    # NK: 2014 - 2016 inclusively
-    site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
+    # # NK: 2014 - 2016 inclusively
+    # site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
+    #     'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
 
     period = site_meta['period']
 
@@ -2220,7 +2222,7 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2014'
+    year = '2016'
     year_str = str(year)
 
     # ============================================
@@ -2229,16 +2231,22 @@ if __name__ == '__main__':
 
     print 'Reading in data...'
 
+    # # read in any pickled S data from before
+    filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
+    with open(filename, 'rb') as handle:
+        pickle_load_in = pickle.load(handle)
+
     # # # read in any pickled S data from before
     # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
     #
-    # optics = pickle_load_in['optics']
-    # S = optics['S']
-    # met = pickle_load_in['met']
-    # N_weight_pm10 = pickle_load_in['N_weight']
-    # pm10_mass = pickle_load_in['pm10_mass']
+
+    optics = pickle_load_in['optics']
+    S = optics['S']
+    met = pickle_load_in['met']
+    N_weight_pm10 = pickle_load_in['N_weight']
+    pm10_mass = pickle_load_in['pm10_mass']
     #
     # key = 'NaCl'
     # a = ~np.isnan(N_weight_pm10[key])
@@ -2283,6 +2291,7 @@ if __name__ == '__main__':
         filename = datadir + 'dN_dmps_aps_clearfloWinter_lt60_cut.pickle'
         with open(filename, 'rb') as handle:
             dN_in = pickle.load(handle)
+
 
         # Test with the DMPS and APS data: effect in the end was very small.
         # # increase N in the first 2 bins of APS data as these are small due to the the discrepency between DMPS and APS
@@ -2441,9 +2450,8 @@ if __name__ == '__main__':
     # All values of an instance are set to nan if there is ANY missing data (e.g. if just the GRIMM was missing
     #   the PM, dN, and RH data for that time will be set to nan) -> avoid unrealistic weighting
     print 'time matching data...'
-    # pm2p5_mass, pm10_mass, met, dN = time_match_pm_RH_dN(pm2p5_mass_in, pm10_mass_in, met_in, dN_in, timeRes)
-    # pm2p5_mass, pm10_mass, met, dN = time_match_pm_RH_dN(pm2p5_mass_in, pm10_mass_in, met_in, dN_in, timeRes)
 
+    # extract out the meteorological variables
     met_in = {key: dN_in[key] for key in ['time', 'RH', 'RH_frac', 'Tair', 'press']}
 
     pm10_mass, met, dN, bad_uni = time_match_pm_met_dN(pm10_mass_cut, met_in, dN_in, timeRes)
@@ -2456,32 +2464,32 @@ if __name__ == '__main__':
     # ==============================================================================
 
     print 'processing data...'
-    if process_type == 'PM10-2p5':
-
-        # create pm10-2p5
-        pm10m2p5_mass = two_pm_dataset_difference(pm2p5_mass, pm10_mass)
-
-
-        # calculate the moles and the mass [kg kg-1] from mass [g cm-3] and met data for pm2p5, pm10-2.5 and pm10
-        pm2p5_moles, pm2p5_mass_kg_kg = calculate_moles_masses(pm2p5_mass, met, aer_particles, inc_soot=soot_flag)
-        pm10m2p5_moles,   pm10m2p5_mass_kg_kg = calculate_moles_masses(pm10m2p5_mass, met, aer_particles, inc_soot=soot_flag)
-        pm10_moles,   pm10_mass_kg_kg = calculate_moles_masses(pm10_mass, met, aer_particles, inc_soot=soot_flag)
-
-        # calculate N_weights for each species so the weights can be applied afterwards
-        #
-        #N_weight_pm2p5 = N_weights_from_pm_mass(aer_particles, pm2p5_mass_kg_kg, aer_density, met, rn_pmlt2p5_m)
-        #N_weight_pm10m2p5 = N_weights_from_pm_mass(aer_particles, pm10m2p5_mass_kg_kg, aer_density, met, rn_2p5_10_m)
-        N_weight_pm10 = N_weights_from_pm_mass(aer_particles, pm10_mass_kg_kg, aer_density, met, rn_pm10_m)
-
-
-        # old way doing N_weight and applying the weight to get the num_conc at the same time
-        # N_weight_pm2p5, num_conc_pm2p5 = est_num_conc_by_species_for_Ndist(aer_particles, pm2p5_mass_kg_kg, aer_density, met, rn_pmlt2p5_m, dN)
-        # N_weight_pm10m2p5, num_conc_pm10m2p5 = est_num_conc_by_species_for_Ndist(aer_particles, pm10m2p5_mass_kg_kg, aer_density, met, rn_2p5_10_m, dN)
-        # N_weight_pm10, num_conc_pm10 = est_num_conc_by_species_for_Ndist(aer_particles, pm10_mass_kg_kg, aer_density, met, rn_10_m, dN)
-
-        # # merge the two num_conc datasets together
-        # limit = 2500.0 # [nm]
-        # num_conc, idx_pm2p5, idx_pm10m2p5 = merge_two_pm_dataset_num_conc(num_conc_pm2p5, num_conc_pm10m2p5, dN, limit)
+    # if process_type == 'PM10-2p5':
+    #
+    #     # create pm10-2p5
+    #     pm10m2p5_mass = two_pm_dataset_difference(pm2p5_mass, pm10_mass)
+    #
+    #
+    #     # calculate the moles and the mass [kg kg-1] from mass [g cm-3] and met data for pm2p5, pm10-2.5 and pm10
+    #     pm2p5_moles, pm2p5_mass_kg_kg = calculate_moles_masses(pm2p5_mass, met, aer_particles, inc_soot=soot_flag)
+    #     pm10m2p5_moles,   pm10m2p5_mass_kg_kg = calculate_moles_masses(pm10m2p5_mass, met, aer_particles, inc_soot=soot_flag)
+    #     pm10_moles,   pm10_mass_kg_kg = calculate_moles_masses(pm10_mass, met, aer_particles, inc_soot=soot_flag)
+    #
+    #     # calculate N_weights for each species so the weights can be applied afterwards
+    #     #
+    #     #N_weight_pm2p5 = N_weights_from_pm_mass(aer_particles, pm2p5_mass_kg_kg, aer_density, met, rn_pmlt2p5_m)
+    #     #N_weight_pm10m2p5 = N_weights_from_pm_mass(aer_particles, pm10m2p5_mass_kg_kg, aer_density, met, rn_2p5_10_m)
+    #     N_weight_pm10 = N_weights_from_pm_mass(aer_particles, pm10_mass_kg_kg, aer_density, met, rn_pm10_m)
+    #
+    #
+    #     old way doing N_weight and applying the weight to get the num_conc at the same time
+    #     N_weight_pm2p5, num_conc_pm2p5 = est_num_conc_by_species_for_Ndist(aer_particles, pm2p5_mass_kg_kg, aer_density, met, rn_pmlt2p5_m, dN)
+    #     N_weight_pm10m2p5, num_conc_pm10m2p5 = est_num_conc_by_species_for_Ndist(aer_particles, pm10m2p5_mass_kg_kg, aer_density, met, rn_2p5_10_m, dN)
+    #     N_weight_pm10, num_conc_pm10 = est_num_conc_by_species_for_Ndist(aer_particles, pm10_mass_kg_kg, aer_density, met, rn_10_m, dN)
+    #
+    #     # merge the two num_conc datasets together
+    #     limit = 2500.0 # [nm]
+    #     num_conc, idx_pm2p5, idx_pm10m2p5 = merge_two_pm_dataset_num_conc(num_conc_pm2p5, num_conc_pm10m2p5, dN, limit)
 
     if process_type == 'PM10':
 
@@ -2499,35 +2507,37 @@ if __name__ == '__main__':
 
     print 'swelling/drying particles...'
 
-    # extract particle radii from each instrument, as some need swelling, others drying
+    # 1 - extract particle radii from each instrument, as some need swelling, others drying
     # Original - SMPS: dry; APS: wet
-    r_d_smps_microns = r_microns[dN['smps_geisinger_idx']] # originally wet from measurements
-    r_md_aps_microns = r_microns[dN['aps_geisinger_idx']] # originally dry from measurements
+    r_d_smps_microns = r_microns[dN['smps_geisinger_idx']] # originally dry from measurements
+    r_md_aps_microns = r_microns[dN['aps_geisinger_idx']] # originally wet from measurements
 
     # meters
     r_d_smps_m = r_m[dN['smps_geisinger_idx']] # originally dry from measurements
     r_md_aps_m = r_m[dN['aps_geisinger_idx']] # originally wet from measurements
 
-    # # duplicate 1D arrays so they can be appended onto varying radii from dry SMPS and wet GRIMM data
-    # r_md_smps_microns_dup = np.tile(r_md_smps_microns, (len(met['time']), 1))
-    # r_md_smps_m_dup = np.tile(r_md_smps_m, (len(met['time']), 1))
-    #
-    # r_d_aps_microns_dup = np.tile(r_d_aps_microns, (len(met['time']), 1))
-    # r_d_aps_m_dup = np.tile(r_d_aps_m, (len(met['time']), 1))
 
-    # duplicate 1D arrays so they can be appended onto varying radii from dry SMPS and wet GRIMM data
+    # 2 - Duplicate 1D arrays so they can be appended onto varying radii from dry SMPS and wet GRIMM data
     r_d_smps_microns_dup = np.tile(r_d_smps_microns, (len(met['time']), 1))
-    r_d_smps_m_dup = np.tile(r_d_smps_m, (len(met['time']), 1))
-
     r_md_aps_microns_dup = np.tile(r_md_aps_microns, (len(met['time']), 1))
+
+    r_d_smps_m_dup = np.tile(r_d_smps_m, (len(met['time']), 1))
     r_md_aps_m_dup = np.tile(r_md_aps_m, (len(met['time']), 1))
+
+    # 3 - Apply nan filter where obs are missing onto the duplicated arrays so
+    r_d_smps_microns_dup[bad_uni, :] = np.nan
+    r_md_aps_microns_dup[bad_uni, :] = np.nan
+
+    r_d_smps_m_dup[bad_uni, :] = np.nan
+    r_md_aps_m_dup[bad_uni, :] = np.nan
+
 
     # ---------------------------------------------------------
     # Swell the particle radii bins
     # r_md [microns]
     # r_md_m [meters]
 
-    # swell the dry SMPS
+    # Swell the dry SMPS
     # r_md_aps_microns, r_md_aps_m = calc_r_md_all(r_d_aps_microns, met, pm10_mass, gf_ffoc)
     r_md_smps_microns, r_md_smps_m = calc_r_md_all(r_d_smps_microns, met, pm10_mass, gf_ffoc)
 
@@ -2539,7 +2549,7 @@ if __name__ == '__main__':
 
     # -----------------------------------------------------------
 
-    # combine the dried SMPS to the constant GRIMM data together, then the constant wet SMPS to the wet GRIMM data.
+    # Combine the dried SMPS to the constant GRIMM data together, then the constant wet SMPS to the wet GRIMM data.
     #   dry SMPS and wet GRIMM radii will vary by species, but the original wet SMPS and dry GRIMM wont as they are
     #   the original bins.
     #   Hence for example: r_d_microns[aer_i] = np.append(r_d_smps_microns[aer_i], r_d_aps_microns)!
@@ -2609,6 +2619,16 @@ if __name__ == '__main__':
 
         pickle_save = pickle_optics_save(pickle_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda)
+
+
+    # Create monthly lidar ratio climatology for the aerFO
+    months = np.array([i.month for i in met['time']])
+
+    for m in range(1, 13):
+
+        bool = months == m
+
+
 
 
 
