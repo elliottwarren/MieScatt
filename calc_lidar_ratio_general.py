@@ -57,7 +57,7 @@ def fixed_radii_for_Nweights():
 
     # 2. D < 10 micron
 
-    # pm1 to pm10 median volume mean radius calculated from clearflo winter data (calculated volume mean diameter / 2.0)
+    # pm1 to pm10 median volume mean radius calculated from NK clearflo winter data (calculated volume mean diameter / 2.0)
     rn_pm10_microns = 0.07478 / 2.0
     # turn units to meters and place an entry for each aerosol
     rn_pm10_m = {}
@@ -565,7 +565,6 @@ def merge_pm_mass_cheap_match(pm_mass_in, pm_oc_bc):
     end_time = np.min([pm_oc_bc['time'][-1], pm_mass_in['time'][-1]])
 
     pm_mass_bool = np.logical_and(pm_mass_in['time'] >= start_time, pm_mass_in['time'] <= end_time)
-    pm_oc_bc_idx = np.where(np.logical_and(pm_oc_bc['time'] >= start_time, pm_oc_bc['time'] <= end_time) == True)[0]
 
     # trim pm_mass and merge - assumes both arrays are temporally complete and have same time resolution
     pm_mass_cut = {var: pm_mass_in[var][pm_mass_bool] for var in pm_mass_in.keys()}
@@ -577,15 +576,15 @@ def merge_pm_mass_cheap_match(pm_mass_in, pm_oc_bc):
 
 
     # add in CORG and CBLK
-    skip_idx = pm_oc_bc_idx[0]
     for t, time_t in enumerate(pm_mass_cut['time']):
 
-        idx = np.where(pm_oc_bc['time'][skip_idx:skip_idx+200] == time_t)[0] + skip_idx
+        idx = np.where(pm_oc_bc['time'] == time_t)[0]
 
-        pm_mass_cut['CORG'][t] = pm_oc_bc['CORG'][idx]
-        pm_mass_cut['CBLK'][t] = pm_oc_bc['CBLK'][idx]
+        # if there is data present
+        if len(idx) != 0:
 
-        skip_idx = idx[-1] + 1
+            pm_mass_cut['CORG'][t] = pm_oc_bc['CORG'][idx]
+            pm_mass_cut['CBLK'][t] = pm_oc_bc['CBLK'][idx]
 
 
     return pm_mass_cut
@@ -1906,8 +1905,7 @@ def calculate_lidar_ratio(aer_particles, date_range, ceil_lambda, r_md_m,  n_wet
 
     return optics
 
-def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md_m,  n_wet, num_conc,
-                                    n_samples, r_orig_bins_m):
+def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md_m,  n_wet, num_conc, n_samples, r_orig_bins_m):
 
     """
     Calculate the lidar ratio and store all optic calculations in a single dictionary for export and pickle saving
@@ -1935,6 +1933,9 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
 
     C_ext = {}
     C_back = {}
+
+    sigma_ext_all_bins = {}
+    sigma_back_all_bins = {}
 
     sigma_ext = {}
     sigma_back = {}
@@ -1968,6 +1969,12 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
 
             C_back[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
             C_back[aer_i][:] = np.nan
+
+            sigma_ext_all_bins[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            sigma_ext_all_bins[aer_i][:] = np.nan
+
+            sigma_back_all_bins[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            sigma_back_all_bins[aer_i][:] = np.nan
 
             sigma_ext[aer_i] = np.empty(len(date_range))
             sigma_ext[aer_i][:] = np.nan
@@ -2044,8 +2051,12 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
                     C_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_back_sample)
 
                 # calculate sigma_ext/back for this aerosol
-                sigma_ext[aer_i][t] = np.nansum(num_conc[aer_i][t, :] * C_ext[aer_i][t, :])
-                sigma_back[aer_i][t] = np.nansum(num_conc[aer_i][t, :] * C_back[aer_i][t, :])
+                # sigma_ext/back_all_bins are to keep contribution at a radii level and for outputting to optics
+                sigma_ext_all_bins[aer_i][t, :] = num_conc[aer_i][t, :] * C_ext[aer_i][t, :]
+                sigma_back_all_bins[aer_i][t, :] = num_conc[aer_i][t, :] * C_back[aer_i][t, :]
+
+                sigma_ext[aer_i][t] = np.nansum(sigma_ext_all_bins[aer_i][t, :])
+                sigma_back[aer_i][t] = np.nansum(sigma_back_all_bins[aer_i][t, :])
 
     # calculate total sigma_ext/back for all aerosol, and the lidar ratio
     sigma_ext_tot = np.nansum(sigma_ext.values(), axis=0)
@@ -2053,7 +2064,7 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
     S = sigma_ext_tot / sigma_back_tot
 
     # store all variables in a dictionary
-    optics = {'S': S, 'sigma_ext': sigma_ext, 'sigma_back': sigma_back}
+    optics = {'S': S, 'sigma_ext_all_bins': sigma_ext_all_bins, 'sigma_back_all_bins': sigma_back_all_bins}
 
     return optics
 
@@ -2100,6 +2111,8 @@ def numpy_optics_save(np_savename, optics, outputSave=False, **kwargs):
     # with open(np_savename, 'wb') as handle:
     #     pickle.dump(pickle_save, handle)
 
+    np.save(np_savename, np_save)
+
     if outputSave == True:
         return np_save
     else:
@@ -2112,14 +2125,15 @@ if __name__ == '__main__':
     # Setup
     # ==============================================================================
 
-    # site information
-    site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
-            'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
+    # # site information
+    # site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
+    #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
     
-    # # NK: 2014 - 2016 inclusively
-    # site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-    #     'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
+    # NK: 2014 - 2016 inclusively
+    site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
+        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
 
+    ceil_lambda = [site_meta['ceil_lambda']]
     period = site_meta['period']
 
     # use PM1 or pm10 data?
@@ -2150,8 +2164,7 @@ if __name__ == '__main__':
     n_samples = 4.0
 
     # wavelength to aim for (in a list! e.g. [905e-06])
-    ceil_lambda = [site_meta['ceil_lambda']]
-    ceil_lambda_str_nm = str(ceil_lambda[0] * 1.0e09) + 'nm'
+    ceil_lambda_str = str(int(site_meta['ceil_lambda'] * 1e9)) + 'nm'
 
     # string for saving figures and choosing subdirectories
     savesub = process_type+'_'+soot_str
@@ -2222,7 +2235,7 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2016'
+    year = '2015'
     year_str = str(year)
 
     # ============================================
@@ -2232,28 +2245,40 @@ if __name__ == '__main__':
     print 'Reading in data...'
 
     # # read in any pickled S data from before
-    filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
+    # filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
+    # with open(filename, 'rb') as handle:
+    #     pickle_load_in = pickle.load(handle)
+
+    # # read in any pickled S data from before
+    filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
     with open(filename, 'rb') as handle:
         pickle_load_in = pickle.load(handle)
 
-    # # # read in any pickled S data from before
-    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
-    # with open(filename, 'rb') as handle:
-    #     pickle_load_in = pickle.load(handle)
-    #
+    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'.npy'
+    # pickle_load_in = np.load(filename).flat[0]
+
 
     optics = pickle_load_in['optics']
     S = optics['S']
     met = pickle_load_in['met']
+    dN = pickle_load_in['dN']
     N_weight_pm10 = pickle_load_in['N_weight']
     pm10_mass = pickle_load_in['pm10_mass']
     #
-    # key = 'NaCl'
+    # key = 'CORG'
+    # plt.figure()
     # a = ~np.isnan(N_weight_pm10[key])
     # data = N_weight_pm10[key][a]
     # plt.hist(data, bins=50)
     # plt.suptitle(key + ' ' + year_str)
-    # plt.savefig(savedir + 'rel_'+key+'_'+year_str+'.png')
+    # # plt.savefig(savedir + 'rel_'+key+'_'+year_str+'.png')
+
+
+    a = np.nanmean(dN_in['dN'], axis=0)
+    plt.semilogx(dN_in['D']/1e3, a)
+    plt.suptitle('NK')
+    plt.ylabel('dN')
+    plt.xlabel('D [microns]')
 
     # ------------------------------------------------------
 
@@ -2322,10 +2347,7 @@ if __name__ == '__main__':
         # numpy load
         d_in = np.load(pickledir + 'N_hourly_NK_APS_SMPS_'+year+'.npy')
         dN_in = d_in.flat[0]
-        #d_in.item().get('dN') # works!
 
-
-        # dN_in['aps_idx'] = dN_in['grimm_idx'] # temp fix as aps_idx was incorrectly called grimm when saving. it is aps!
 
         # make sure datetimes are in UTC
         zone = tz.gettz('UTC')
@@ -2345,10 +2367,13 @@ if __name__ == '__main__':
 
     if (site_meta['site_long'] == 'Chilbolton') & (site_meta['period'] == '2016'):
 
-        # read in number distribution and RH from pickled data
-        filename = datadir + 'N_hourly_Ch_SMPS_GRIMM.pickle'
-        with open(filename, 'rb') as handle:
-            dN_in = pickle.load(handle)
+        # # read in number distribution and RH from pickled data
+        # filename = datadir + 'N_hourly_Ch_SMPS_GRIMM.pickle'
+        # with open(filename, 'rb') as handle:
+        #     dN_in = pickle.load(handle)
+
+        d_in = np.load(pickledir + 'N_hourly_Ch_SMPS_GRIMM_2016_extra_months.npy')
+        dN_in = d_in.flat[0]
 
         # make sure datetimes are in UTC
         zone = tz.gettz('UTC')
@@ -2359,6 +2384,9 @@ if __name__ == '__main__':
         r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
         r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
 
+
+    # convert dN_in['dN'] units from cm-3 to m-3
+    dN_in['dN'] *= 1e6
 
     # interpolated r values to from the Geisinger et al 2017 approach
     # will increase the number of r bins to (number of r bins * n_samples)
@@ -2374,6 +2402,28 @@ if __name__ == '__main__':
     else:
         r_microns = r_d_orig_bins_microns
         r_m = r_d_orig_bins_m
+
+
+    # Remove the first 10 idx for APS as the dried APS size range will overlap the swollen SMPS!
+    idx = np.append(dN_in['smps_idx'], dN_in['aps_idx'][10:])
+    dN_in['dN'] = dN_in['dN'][:, idx]
+    dN_in['dN/dlogD'] = dN_in['dN/dlogD'][:, idx]
+    dN_in['dV/dlogD'] = dN_in['dV/dlogD'][:, idx]
+    dN_in['D'] = dN_in['D'][idx]
+    dN_in['dD'] = dN_in['dD'][idx]
+    r_orig_bins_microns = r_orig_bins_microns[idx]
+    r_orig_bins_m = r_orig_bins_m[idx]
+    # remake aps idx to fit the new data
+    dN_in['aps_idx'] = dN_in['aps_idx'][:-10]
+
+    if Geisinger_subsample_flag == 1:
+        # remove idx in geisinger idx ranges
+        g_idx = np.append(dN_in['smps_geisinger_idx'], dN_in['aps_geisinger_idx'][40:])
+        r_microns = r_microns[g_idx]
+        r_m = r_m[g_idx]
+        dN_in['aps_geisinger_idx'] = dN_in['aps_geisinger_idx'][:-40]
+
+
 
     # ==============================================================================
     # Read meteorological data
@@ -2493,7 +2543,7 @@ if __name__ == '__main__':
 
     if process_type == 'PM10':
 
-        pm10_moles,   pm10_mass_kg_kg = calculate_moles_masses(pm10_mass, met, aer_particles, inc_soot=soot_flag)
+        pm10_moles, pm10_mass_kg_kg = calculate_moles_masses(pm10_mass, met, aer_particles, inc_soot=soot_flag)
 
         N_weight_pm10 = N_weights_from_pm_mass(aer_particles, pm10_mass_kg_kg, aer_density, met, rn_pm10_m)
 
@@ -2615,22 +2665,66 @@ if __name__ == '__main__':
     #   calculating the lidar ratio for 1 year can take 3-6 hours (depending on len(D))
     if picklesave == True:
 
-        pickle_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str_nm+'.pickle'
+        # pickle_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str_nm+'.pickle'
+        # pickle_save = pickle_optics_save(pickle_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
+        #             ceil_lambda=ceil_lambda)
 
-        pickle_save = pickle_optics_save(pickle_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
+        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'.npy'
+        np_save = numpy_optics_save(np_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda)
 
+    # ------------------------------------------
 
     # Create monthly lidar ratio climatology for the aerFO
     months = np.array([i.month for i in met['time']])
+    # what RH_frac values to interpolate S onto
+    RH_inter = np.arange(0, 1.01, 0.01)
 
-    for m in range(1, 13):
+    # month, RH
+    S_climatology = np.empty((12, 101))
+    S_climatology[:] = np.nan
 
+    for m_idx, m in enumerate(range(1, 11)):
+
+        # data for this month
         bool = months == m
 
+        extract_S = S[bool]# just this month's data
+        extract_RH_frac = met['RH_frac'][bool]
+
+        # ployfit only works on non nan data so need to pull that data out, for this month.
+        idx1 = np.where(~np.isnan(extract_RH_frac))
+        idx2 = np.where(~np.isnan(extract_S))
+        idx = np.unique(np.append(idx1, idx2))
+        # Create the linear fit
+        z = np.polyfit(extract_RH_frac[idx], extract_S[idx], 1)
+        p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as S was regressed against RH_frac)
+        # Apply the linear fit and store it in S_climatology, for this month
+        S_climatology[m_idx, :] = np.array([p(RH_frac_i) for RH_frac_i in RH_inter])
+        bool = S_climatology[m_idx, :] < np.nanmin(extract_S)
+        S_climatology[m_idx, bool] = np.nanmin(extract_S)
+
+        # polyfit can make low S value be unreasonable (negative) therefore make all regressed values = to the minimum
+        # estimated S from the original data, for that month
+        if m !=7:
+            plt.plot(np.transpose(S_climatology[m_idx, :]), label=str(m_idx))
+
+    S_climatology[10,:] = S_climatology[9,:] # Nov - missing
+    S_climatology[11,:] = S_climatology[9,:] # Dec - missing
+    S_climatology[6,:] = S_climatology[7,:] # low sample = bad fit
+
+    plt.plot(np.transpose(S_climatology[6, :]), label=str(6))
+    plt.plot(np.transpose(S_climatology[10, :]), label=str(10))
+    plt.plot(np.transpose(S_climatology[11, :]), label=str(11))
+    plt.legend(loc='upper left')
+
+    # save
+    save_dict = {'S_climatology': S_climatology, 'RH_frac': RH_inter}
+    np_save_clim = pickledir +'S_climatology_' + savestr + '_' + ceil_lambda_str + '.npy'
+    np.save(np_save_clim, save_dict)
 
 
-
+    # ------------------------------------------
 
     # get mean and nanstd from data
     # set up the date range to fill (e.g. want daily statistics then stats_date_range = daily resolution)
@@ -2673,7 +2767,6 @@ if __name__ == '__main__':
     plt.close(fig)
 
     # HISTOGRAM - S
-
     idx = np.logical_or(np.isnan(S), np.isnan(met['RH']))
 
     # plot all the S in raw form (hist)
@@ -2711,18 +2804,19 @@ if __name__ == '__main__':
     # r_str = '%.2f' % corr[0]
     fig, ax = plt.subplots(1,1,figsize=(8, 4))
     key = 'CBLK'
-    scat = ax.scatter(met['RH'], S)
+    #scat = ax.scatter(met['RH'], S)
     scat = ax.scatter(met['RH'], S, c=N_weight_pm10[key]*100.0, vmin= 0.0, vmax = 25.0)
     cbar = plt.colorbar(scat, ax=ax)
     # cbar.set_label('Soot [%]', labelpad=-20, y=1.1, rotation=0)
     cbar.set_label('[%]', labelpad=-20, y=1.1, rotation=0)
     plt.xlabel(r'$RH \/[\%]$')
     plt.ylabel(r'$Lidar Ratio \/[sr]$')
-    plt.ylim([10.0, 80.0])
-    plt.xlim([20.0, 110.0])
+    plt.ylim([10.0, 90.0])
+    plt.xlim([20.0, 100.0])
     plt.tight_layout()
+    plt.suptitle(ceil_lambda_str)
     # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
-    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'.png')
+    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'.png')
     plt.close(fig)
 
     # ------------------------------------------------
