@@ -259,7 +259,7 @@ def calc_Q_ext(x, m, type, y=[], m2=[],):
     return Q
 
 
-def main():
+if __name__ == '__main__':
 
 
     import numpy as np
@@ -291,6 +291,8 @@ def main():
     # all_aer = ['ammonium_sulphate', 'ammonium_nitrate', 'organic_carbon', 'biogenic', 'NaCl', 'soot']
     all_aer = {'Ammonium sulphate': 'red', 'Ammonium nitrate':'orange', 'Organic carbon': [0.05, 0.9, 0.4],
                'Biogenic': [0.05,0.56,0.85], 'Generic NaCl': 'magenta', 'Soot': 'brown'}
+    aer_names = {'Ammonium sulphate': 'Ammonium sulphate', 'Ammonium nitrate': 'Ammonium nitrate', 'Biogenic': 'Biogenic',
+            'Organic carbon': 'Organic carbon', 'Generic NaCl': 'Generic NaCl', 'Soot':'Black carbon', 'MURK': 'MURK'}
     # all_aer = ['soot']
 
     # create dry size distribution [m]
@@ -385,12 +387,14 @@ def main():
 
 
     # plot
-    fig = plt.figure(figsize=(6, 4))
+    fig = plt.figure(figsize=(8, 5))
 
     for aer_i in all_aer_order:
 
         # plot it
-        plt.semilogx(r_md_microm, Q_dry[aer_i], label=aer_i, color=all_aer[aer_i])
+        # plt.semilogx(r_md_microm, Q_dry[aer_i], label=aer_i, color=all_aer[aer_i]) # ld before soot = black carbon
+        plt.semilogx(r_md_microm, Q_dry[aer_i], label=aer_names[aer_i], color=all_aer[aer_i])
+
         # plt.semilogx(r_md_microm, Q_dry, label='dry murk', color=[0,0,0])
         # plt.semilogx(r_m_microm, Q_del, label='deliquescent murk (RH = ' + str(RH) + ')')
         # plt.semilogx(r_m_microm, Q_coat, label='coated murk (RH = ' + str(RH) + ')')
@@ -405,13 +409,13 @@ def main():
 
 
     # plt.title('lambda = ' + str(ceil_lambda[0]) + 'nm')
-    plt.xlabel(r'$r_{md} \/\mathrm{[\mu m]}$', labelpad=-10, fontsize=13)
+    plt.xlabel(r'$r_{md} \/\mathrm{[\mu m]}$', labelpad=-10, fontsize=15)
     plt.xlim([0.05, 5.0])
     plt.ylim([0.0, 5.0])
     #plt.xlim([0.01, 0.2])
     #plt.ylim([0.0, 0.1])
-    plt.ylabel(r'$Q_{ext,dry}$', fontsize=13)
-    plt.legend(fontsize=8, loc='best')
+    plt.ylabel(r'$Q_{ext,dry}$', fontsize=15)
+    plt.legend(fontsize=9, loc='best')
     plt.tick_params(axis='both',labelsize=10)
     plt.grid(b=True, which='major', color='grey', linestyle='--')
     plt.grid(b=True, which='minor', color=[0.85, 0.85, 0.85], linestyle='--')
@@ -425,7 +429,5 @@ def main():
 
     print 'END PROGRAM'
 
-if __name__ == '__main__':
-    main()
 
 
