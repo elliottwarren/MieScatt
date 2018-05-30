@@ -1845,11 +1845,11 @@ if __name__ == '__main__':
     # ==============================================================================
 
     # site information
-    # site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
-    #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
+    site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
+            'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
     
-    site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-        'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
+    # site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
+    #     'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
 
     period = site_meta['period']
 
@@ -1969,6 +1969,12 @@ if __name__ == '__main__':
     # met = pickle_load_in['met']
     # N_weight_pm10 = pickle_load_in['N_weight']
     # pm10_mass = pickle_load_in['pm10_mass']
+
+    a = np.nanmean(dN_in['dN'], axis=0)
+    plt.semilogx(dN_in['D']/1e3, a)
+    plt.suptitle('CH')
+    plt.ylabel('dN')
+    plt.xlabel('D [microns]')
 
     for year in years:
 
