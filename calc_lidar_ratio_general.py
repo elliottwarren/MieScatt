@@ -2118,6 +2118,65 @@ def numpy_optics_save(np_savename, optics, outputSave=False, **kwargs):
     else:
         return
 
+def create_S_climatology(met, S):
+
+        """
+        Create monthly lidar ratio climatology for the aerFO
+        :param met:
+        :param S:
+        :return:
+        """
+
+        # find which month each timestep is for
+        months = np.array([i.month for i in met['time']])
+        # what RH_frac values to interpolate S onto
+        RH_inter = np.arange(0, 1.01, 0.01)
+
+        # month, RH
+        S_climatology = np.empty((12, 101))
+        S_climatology[:] = np.nan
+
+        for m_idx, m in enumerate(range(1, 11)):
+
+            # data for this month
+            bool = months == m
+
+            extract_S = S[bool]# just this month's data
+            extract_RH_frac = met['RH_frac'][bool]
+
+            # ployfit only works on non nan data so need to pull that data out, for this month.
+            idx1 = np.where(~np.isnan(extract_RH_frac))
+            idx2 = np.where(~np.isnan(extract_S))
+            idx = np.unique(np.append(idx1, idx2))
+            # Create the linear fit
+            z = np.polyfit(extract_RH_frac[idx], extract_S[idx], 1)
+            p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as S was regressed against RH_frac)
+            # Apply the linear fit and store it in S_climatology, for this month
+            S_climatology[m_idx, :] = np.array([p(RH_frac_i) for RH_frac_i in RH_inter])
+            bool = S_climatology[m_idx, :] < np.nanmin(extract_S)
+            S_climatology[m_idx, bool] = np.nanmin(extract_S)
+
+            # polyfit can make low S value be unreasonable (negative) therefore make all regressed values = to the minimum
+            # estimated S from the original data, for that month
+            if m !=7:
+                plt.plot(np.transpose(S_climatology[m_idx, :]), label=str(m_idx))
+
+        S_climatology[10,:] = S_climatology[9,:] # Nov - missing
+        S_climatology[11,:] = S_climatology[9,:] # Dec - missing
+        S_climatology[6,:] = S_climatology[7,:] # low sample = bad fit
+
+        plt.plot(np.transpose(S_climatology[6, :]), label=str(6))
+        plt.plot(np.transpose(S_climatology[10, :]), label=str(10))
+        plt.plot(np.transpose(S_climatology[11, :]), label=str(11))
+        plt.legend(loc='upper left')
+
+        # save
+        save_dict = {'S_climatology': S_climatology, 'RH_frac': RH_inter}
+        np_save_clim = pickledir +'S_climatology_' + savestr + '_' + ceil_lambda_str + '.npy'
+        np.save(np_save_clim, save_dict)
+
+        return save_dict
+
 # def main():
 if __name__ == '__main__':
 
@@ -2249,21 +2308,20 @@ if __name__ == '__main__':
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
 
-    # # read in any pickled S data from before
-    filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
-    with open(filename, 'rb') as handle:
-        pickle_load_in = pickle.load(handle)
+    # # # read in any pickled S data from before
+    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
+    # with open(filename, 'rb') as handle:
+    #     pickle_load_in = pickle.load(handle)
 
     # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'.npy'
     # pickle_load_in = np.load(filename).flat[0]
 
-
-    optics = pickle_load_in['optics']
-    S = optics['S']
-    met = pickle_load_in['met']
-    dN = pickle_load_in['dN']
-    N_weight_pm10 = pickle_load_in['N_weight']
-    pm10_mass = pickle_load_in['pm10_mass']
+    # optics = pickle_load_in['optics']
+    # S = optics['S']
+    # met = pickle_load_in['met']
+    # dN = pickle_load_in['dN']
+    # N_weight_pm10 = pickle_load_in['N_weight']
+    # pm10_mass = pickle_load_in['pm10_mass']
     #
     # key = 'CORG'
     # plt.figure()
@@ -2273,12 +2331,11 @@ if __name__ == '__main__':
     # plt.suptitle(key + ' ' + year_str)
     # # plt.savefig(savedir + 'rel_'+key+'_'+year_str+'.png')
 
-
-    a = np.nanmean(dN_in['dN'], axis=0)
-    plt.semilogx(dN_in['D']/1e3, a)
-    plt.suptitle('NK')
-    plt.ylabel('dN')
-    plt.xlabel('D [microns]')
+    # a = np.nanmean(dN_in['dN/dlogD'], axis=0)
+    # plt.semilogx(dN_in['D']/1e3, a)
+    # plt.suptitle('NK')
+    # plt.ylabel('dN/dlogD')
+    # plt.xlabel('D [microns]')
 
     # ------------------------------------------------------
 
@@ -2675,54 +2732,8 @@ if __name__ == '__main__':
 
     # ------------------------------------------
 
-    # Create monthly lidar ratio climatology for the aerFO
-    months = np.array([i.month for i in met['time']])
-    # what RH_frac values to interpolate S onto
-    RH_inter = np.arange(0, 1.01, 0.01)
-
-    # month, RH
-    S_climatology = np.empty((12, 101))
-    S_climatology[:] = np.nan
-
-    for m_idx, m in enumerate(range(1, 11)):
-
-        # data for this month
-        bool = months == m
-
-        extract_S = S[bool]# just this month's data
-        extract_RH_frac = met['RH_frac'][bool]
-
-        # ployfit only works on non nan data so need to pull that data out, for this month.
-        idx1 = np.where(~np.isnan(extract_RH_frac))
-        idx2 = np.where(~np.isnan(extract_S))
-        idx = np.unique(np.append(idx1, idx2))
-        # Create the linear fit
-        z = np.polyfit(extract_RH_frac[idx], extract_S[idx], 1)
-        p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as S was regressed against RH_frac)
-        # Apply the linear fit and store it in S_climatology, for this month
-        S_climatology[m_idx, :] = np.array([p(RH_frac_i) for RH_frac_i in RH_inter])
-        bool = S_climatology[m_idx, :] < np.nanmin(extract_S)
-        S_climatology[m_idx, bool] = np.nanmin(extract_S)
-
-        # polyfit can make low S value be unreasonable (negative) therefore make all regressed values = to the minimum
-        # estimated S from the original data, for that month
-        if m !=7:
-            plt.plot(np.transpose(S_climatology[m_idx, :]), label=str(m_idx))
-
-    S_climatology[10,:] = S_climatology[9,:] # Nov - missing
-    S_climatology[11,:] = S_climatology[9,:] # Dec - missing
-    S_climatology[6,:] = S_climatology[7,:] # low sample = bad fit
-
-    plt.plot(np.transpose(S_climatology[6, :]), label=str(6))
-    plt.plot(np.transpose(S_climatology[10, :]), label=str(10))
-    plt.plot(np.transpose(S_climatology[11, :]), label=str(11))
-    plt.legend(loc='upper left')
-
-    # save
-    save_dict = {'S_climatology': S_climatology, 'RH_frac': RH_inter}
-    np_save_clim = pickledir +'S_climatology_' + savestr + '_' + ceil_lambda_str + '.npy'
-    np.save(np_save_clim, save_dict)
-
+    # Create and save the S climatology
+    save_dict = create_S_climatology(met, S)
 
     # ------------------------------------------
 
@@ -2762,7 +2773,7 @@ if __name__ == '__main__':
     # plt.ylim([20.0, 60.0])
     ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
     plt.ylabel('Lidar Ratio')
-    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_dailybinned_'+ceil_lambda_str_nm+'.png')
+    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_dailybinned_'+ceil_lambda_str+'.png')
     # plt.savefig(savedir + 'S_'+year+'_'+process_type+'_'+Geisinger_str+'_dailybinned_lt60_'+ceil_lambda_str_nm+'.png')
     plt.close(fig)
 
@@ -2776,7 +2787,7 @@ if __name__ == '__main__':
     plt.suptitle('Lidar Ratio:\n'+savesub+' masses; equal Number weighting per rbin; ClearfLo winter N(r)')
     plt.xlabel('Lidar Ratio')
     plt.ylabel('Frequency')
-    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_histogram_'+ceil_lambda_str_nm+'.png')
+    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_histogram_'+ceil_lambda_str+'.png')
     plt.close(fig)
 
     # TIMESERIES - S - not binned
@@ -2800,11 +2811,11 @@ if __name__ == '__main__':
 
     # SCATTER - S vs RH (PM1)
     # quick plot 15 min S and RH for 2016.
-    # corr = spearmanr(met['RH'], S) <- erronous value!!!! (https://github.com/scipy/scipy/issues/6530)
+    # corr = spearmanr(met['RH'], S) <- erronous value - use spearmanr value calculated earlier!!!! ->
+    #   (https://github.com/scipy/scipy/issues/6530)
     # r_str = '%.2f' % corr[0]
     fig, ax = plt.subplots(1,1,figsize=(8, 4))
     key = 'CBLK'
-    #scat = ax.scatter(met['RH'], S)
     scat = ax.scatter(met['RH'], S, c=N_weight_pm10[key]*100.0, vmin= 0.0, vmax = 25.0)
     cbar = plt.colorbar(scat, ax=ax)
     # cbar.set_label('Soot [%]', labelpad=-20, y=1.1, rotation=0)
