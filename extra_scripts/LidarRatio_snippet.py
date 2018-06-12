@@ -88,9 +88,10 @@ datadir = '/home/nerc/Documents/MieScatt/data/'
 # save dir
 savedir = maindir + 'figures/LidarRatio/'
 
-# ceil_lambda = 905.0e-09
+ceil_lambda = 905.0e-09
 # ceil_lambda = 355.0e-09
-ceil_lambda = 532.0e-09
+# ceil_lambda = 532.0e-09
+# ceil_lambda = 1064e-09
 
 # lambda in nanometers and as a string
 ceil_lambda_str_nm = str(ceil_lambda * 1.0e09) + 'nm'
@@ -99,6 +100,12 @@ step = 0.005
 r_range_um = np.arange(0.000 + step, 10.000 + step, step)
 r_range_m = r_range_um * 1.0e-06
 x_range = (2.0 * np.pi * r_range_m)/ceil_lambda
+
+# step = 0.05
+# num_range = np.arange(1.0, 10.0, step)
+# r_range_m = np.hstack([num_range*(10**i) for i in range(-11, -5)])
+# r_range_um = r_range_m * 1e6
+# x_range = (2.0 * np.pi * r_range_m)/ceil_lambda
 
 # aerosol species
 aer_particles = ['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG', 'CBLK']
@@ -168,55 +175,54 @@ fig, ax = plt.subplots(1,1, figsize=(7, 4))
 for key, data in S_r.iteritems():
     plt.loglog(r_range_um * 2.0, data, label=aer_labels[key]) # diameter [microns]
 # plt.xlim([0.01, 100.0])
-# plt.ylim([1.0, 10.0e7])
+plt.ylim([1.0, 10.0e5])
 plt.xlim([0.01, 20])
 plt.ylabel(r'$Lidar \/Ratio \/[sr]$')
 plt.xlabel(r'$Diameter \/[\mu m]$')
 plt.legend(loc='upper center', fontsize=10)
 plt.suptitle('lambda=' + ceil_lambda_str_nm)
 plt.tight_layout()
-plt.show()
+# plt.show()
 plt.savefig(savedir + 'quickplot_S_vs_r_bySpecies_'+ ceil_lambda_str_nm +'.png')
-plt.close(fig)
-print 'test22222'
+# plt.close(fig)
 
 
 
 # -----------------------------------------------------
 
 #S_r = lidar ratio
-S_r = np.empty(len(r_range_m))
-S_r[:] = np.nan
-for r_idx, r_i in enumerate(r_range_m):
-
-    x_i = x_range[r_idx]  # size parameter_i
-    n_i = complex(1.47 + 0.099j)  # fixed complex index of refraction i
-
-    # print loop progress
-    if r_idx in np.arange(0, 2100, 100):
-        print r_idx
-
-    # calculate Q_back and Q_ext efficiency for current size parameter and complex index of refraction
-    particle = Mie(x=x_i, m=n_i)
-    Q_ext = particle.qext()
-    Q_back = particle.qb()
-    Q_back_alt = Q_back / (4.0 * np.pi)
-
-    # calculate the lidar ratio
-    S_r[r_idx] = Q_ext / Q_back
-
-
-# simple plot of S
-fig, ax = plt.subplots(1,1, figsize=(6,5))
-plt.loglog(r_range_um * 2.0, S_r) # diameter [microns]
-plt.xlim([0.01, 100.0])
-plt.ylim([1.0, 10.0e7])
-plt.ylabel('Lidar Ratio')
-plt.xlabel('Diameter [microns]')
-plt.tight_layout()
-plt.show()
-#plt.savefig(savedir + 'quickplot_S_vs_r.png')
-#plt.close(fig)
+# S_r = np.empty(len(r_range_m))
+# S_r[:] = np.nan
+# for r_idx, r_i in enumerate(r_range_m):
+#
+#     x_i = x_range[r_idx]  # size parameter_i
+#     n_i = complex(1.47 + 0.099j)  # fixed complex index of refraction i
+#
+#     # print loop progress
+#     if r_idx in np.arange(0, 2100, 100):
+#         print r_idx
+#
+#     # calculate Q_back and Q_ext efficiency for current size parameter and complex index of refraction
+#     particle = Mie(x=x_i, m=n_i)
+#     Q_ext = particle.qext()
+#     Q_back = particle.qb()
+#     Q_back_alt = Q_back / (4.0 * np.pi)
+#
+#     # calculate the lidar ratio
+#     S_r[r_idx] = Q_ext / Q_back
+#
+#
+# # simple plot of S
+# fig, ax = plt.subplots(1,1, figsize=(6,5))
+# plt.loglog(r_range_um * 2.0, S_r) # diameter [microns]
+# plt.xlim([0.01, 100.0])
+# plt.ylim([1.0, 10.0e7])
+# plt.ylabel('Lidar Ratio')
+# plt.xlabel('Diameter [microns]')
+# plt.tight_layout()
+# plt.show()
+# #plt.savefig(savedir + 'quickplot_S_vs_r.png')
+# #plt.close(fig)
 
 # ---------------------------------------------------------
 
