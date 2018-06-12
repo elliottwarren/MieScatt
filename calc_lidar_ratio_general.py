@@ -395,7 +395,7 @@ def trim_mass_wxt_times(mass, WXT):
 
 ## data in processing
 
-def Geisinger_increase_r_bins(dN, r_d_orig_bins_microns, n_samples=4.0):
+def Geisinger_increase_r_bins(dN, r_orig_bins_microns, n_samples=4.0):
 
     """
     Increase the number of sampling bins from the original data using a sampling method
@@ -415,7 +415,7 @@ def Geisinger_increase_r_bins(dN, r_d_orig_bins_microns, n_samples=4.0):
 
     # create the radii values in between the edges (evenly spaced within each bin)
     R_dg = np.array([(g * ((R_db[i] - R_da[i])/n_samples)) + R_da[i]
-                     for i in range(len(r_d_orig_bins_microns))
+                     for i in range(len(r_orig_bins_microns))
                      for g in range(1,int(n_samples)+1)])
 
     # add the idx positions for the geisinger bins that came from each instrument to dN
@@ -1340,7 +1340,7 @@ def calc_r_md_all(r_microns, met, pm_mass, gf_ffoc):
     ## 2. Black carbon ('CBLK')
 
     # set r_md for black carbon as r_d, assuming black carbon is completely hydrophobic
-    # create a r_d_microns_dry_dup (rbins copied for each time, t) to help with calculations
+    # create a r_microns_dry_dup (rbins copied for each time, t) to help with calculations
     r_md['CBLK'] = np.tile(r_microns, (len(met['time']), 1))
 
     # make r_md['CBLK'] nan for all sizes, for times t, if mass data is not present for time t
@@ -1366,13 +1366,13 @@ def calc_r_md_all(r_microns, met, pm_mass, gf_ffoc):
 
     return r_md, r_md_m
 
-def calc_r_md_species(r_d_microns, met, aer_i):
+def calc_r_md_species(r_microns, met, aer_i):
 
     """
     Calculate the r_md [microns] for all particles, given the RH [fraction] and what species
     Swells particles from a dry radius
 
-    :param r_d_microns:
+    :param r_microns:
     :param met: meteorological variables (needed for RH and time)
     :param aer_i:
     :return: r_md_t: swollen radii at time, t
@@ -1383,16 +1383,16 @@ def calc_r_md_species(r_d_microns, met, aer_i):
 
 
     # calulate r_md based on Fitzgerald (1975) eqn 8 - 10
-    def calc_r_md_t(r_d_microns, rh_i, alpha_factor):
+    def calc_r_md_t(r_microns, rh_i, alpha_factor):
 
         """
         Calculate r_md for a single value of rh (rh_i) at a time t (alpha and beta will be applied to all rbins)
         :param rh_i:
-        :param r_d_microns: NOt the duplicated array!
+        :param r_microns: NOt the duplicated array!
         :return: r_md_i
 
 
-        The r_md calculated here will be for a fixed RH, therefore the single row of r_d_microns will be fine, as it
+        The r_md calculated here will be for a fixed RH, therefore the single row of r_microns will be fine, as it
         will compute a single set of r_md as a result.
         """
 
@@ -1405,7 +1405,7 @@ def calc_r_md_species(r_d_microns, met, aer_i):
         alpha = 1.2 * np.exp((0.066 * rh_i) / (phi - rh_i))
 
         # alpha factor comes from the Table 1 in Fitzgerald (1975) to be used with some other aerosol types
-        r_md_t = alpha_factor * alpha * (r_d_microns ** beta)
+        r_md_t = alpha_factor * alpha * (r_microns ** beta)
 
         return r_md_t
 
@@ -1414,7 +1414,7 @@ def calc_r_md_species(r_d_microns, met, aer_i):
     # duplicate the range of radii to multiple rows, one for each RH - shape(time, rbin).
     # Remember: the number in each diameter bin might change, but the bin diameters themselves will not.
     #   Therefore this approach works for constant and time varying number distirbutions.
-    r_d_microns_dup = np.tile(r_d_microns, (len(met['time']), 1))
+    r_microns_dup = np.tile(r_microns, (len(met['time']), 1))
 
     # Set up array for aerosol
     r_md =  np.empty(len(met['time']))
@@ -1466,29 +1466,29 @@ def calc_r_md_species(r_d_microns, met, aer_i):
     alpha = 1.2 * np.exp((0.066 * met['RH_frac'])/ (phi - met['RH_frac']))
 
     # duplicate values across to all radii bins to help r_md = .. calculation: alpha_dup.shape = (time, rbin)
-    alpha_dup = np.tile(alpha, (len(r_d_microns), 1)).transpose()
-    beta_dup = np.tile(beta, (len(r_d_microns), 1)).transpose()
+    alpha_dup = np.tile(alpha, (len(r_microns), 1)).transpose()
+    beta_dup = np.tile(beta, (len(r_microns), 1)).transpose()
 
-    r_md = alpha_factor * alpha_dup * (r_d_microns_dup ** beta_dup)
+    r_md = alpha_factor * alpha_dup * (r_microns_dup ** beta_dup)
 
     # --- above rh_cap ------#
 
     # set all r_md(RH>99.5%) to r_md(RH=99.5%) to prevent growth rates inconsistent with impirical equation.
     # replace all r_md values above 0.995 with 0.995
     rh_gt_cap = met['RH_frac'] > rh_cap
-    r_md[rh_gt_cap, :] = calc_r_md_t(r_d_microns, rh_cap, alpha_factor)
+    r_md[rh_gt_cap, :] = calc_r_md_t(r_microns, rh_cap, alpha_factor)
 
     # --- 0 to efflorescence --- #
 
     # below efflorescence point (0.3 for sulhate, r_md = r_d)
     rh_lt_eff = met['RH_frac'] <= rh_eff
-    r_md[rh_lt_eff, :] = r_d_microns
+    r_md[rh_lt_eff, :] = r_microns
 
     # ------ efflorescence to deliquescence ----------#
 
     # calculate r_md for the deliquescence rh - used in linear interpolation
     # r_md at deliquescence point (used in interpolation)
-    r_md_del = calc_r_md_t(r_d_microns, rh_del, alpha_factor)
+    r_md_del = calc_r_md_t(r_microns, rh_del, alpha_factor)
 
     # idx for all values that need to have some linear interpolation
     bool = np.logical_and(met['RH_frac'] >= rh_eff, met['RH_frac'] <= rh_del)
@@ -1497,11 +1497,11 @@ def calc_r_md_species(r_d_microns, met, aer_i):
     # between efflorescence point and deliquescence point, r_md is expected to value linearly between the two
     low_rh = rh_eff
     up_rh = rh_del
-    low_r_md = r_d_microns
+    low_r_md = r_microns
     up_r_md = r_md_del
 
     diff_rh = up_rh - low_rh
-    diff_r_md = r_md_del - r_d_microns
+    diff_r_md = r_md_del - r_microns
     abs_diff_r_md = abs(diff_r_md)
 
     # find distance rh is along linear interpolation [fraction] from lower limit
@@ -1512,7 +1512,7 @@ def calc_r_md_species(r_d_microns, met, aer_i):
     # duplicate abs_diff_r_md by the number of instances needing to be interpolated - helps the calculation below
     #   of r_md = ...low + (frac * abs diff)
     abs_diff_r_md_dup = np.tile(abs_diff_r_md, (len(rh_bet_eff_del), 1))
-    frac_dup = np.tile(frac, (len(r_d_microns), 1)).transpose()
+    frac_dup = np.tile(frac, (len(r_microns), 1)).transpose()
 
     # calculate interpolated values for r_md
     r_md[rh_bet_eff_del, :] = low_r_md + (frac_dup * abs_diff_r_md_dup)
@@ -2190,7 +2190,7 @@ if __name__ == '__main__':
     
     # NK: 2014 - 2016 inclusively
     site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
+        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 1.064e-06}
 
     ceil_lambda = [site_meta['ceil_lambda']]
     period = site_meta['period']
@@ -2212,7 +2212,7 @@ if __name__ == '__main__':
         soot_str = 'noSoot'
 
     # Geisinger et al., 2017 subsampling?
-    Geisinger_subsample_flag = 1
+    Geisinger_subsample_flag = 0
 
     if Geisinger_subsample_flag == 1:
         Geisinger_str = 'geisingerSample'
@@ -2331,10 +2331,10 @@ if __name__ == '__main__':
     # plt.suptitle(key + ' ' + year_str)
     # # plt.savefig(savedir + 'rel_'+key+'_'+year_str+'.png')
 
-    # a = np.nanmean(dN_in['dN/dlogD'], axis=0)
+    # a = np.nanmean(dN_in['dV/dlogD'], axis=0)
     # plt.semilogx(dN_in['D']/1e3, a)
     # plt.suptitle('NK')
-    # plt.ylabel('dN/dlogD')
+    # plt.ylabel('dV/dlogD')
     # plt.xlabel('D [microns]')
 
     # ------------------------------------------------------
@@ -2457,28 +2457,28 @@ if __name__ == '__main__':
         r_microns = R_dg_microns
         r_m = R_dg_m
     else:
-        r_microns = r_d_orig_bins_microns
-        r_m = r_d_orig_bins_m
+        r_microns = r_orig_bins_microns
+        r_m = r_orig_bins_m
 
 
-    # Remove the first 10 idx for APS as the dried APS size range will overlap the swollen SMPS!
-    idx = np.append(dN_in['smps_idx'], dN_in['aps_idx'][10:])
-    dN_in['dN'] = dN_in['dN'][:, idx]
-    dN_in['dN/dlogD'] = dN_in['dN/dlogD'][:, idx]
-    dN_in['dV/dlogD'] = dN_in['dV/dlogD'][:, idx]
-    dN_in['D'] = dN_in['D'][idx]
-    dN_in['dD'] = dN_in['dD'][idx]
-    r_orig_bins_microns = r_orig_bins_microns[idx]
-    r_orig_bins_m = r_orig_bins_m[idx]
-    # remake aps idx to fit the new data
-    dN_in['aps_idx'] = dN_in['aps_idx'][:-10]
-
-    if Geisinger_subsample_flag == 1:
-        # remove idx in geisinger idx ranges
-        g_idx = np.append(dN_in['smps_geisinger_idx'], dN_in['aps_geisinger_idx'][40:])
-        r_microns = r_microns[g_idx]
-        r_m = r_m[g_idx]
-        dN_in['aps_geisinger_idx'] = dN_in['aps_geisinger_idx'][:-40]
+    # # Remove the first 10 idx for APS as the dried APS size range will overlap the swollen SMPS!
+    # idx = np.append(dN_in['smps_idx'], dN_in['aps_idx'][10:])
+    # dN_in['dN'] = dN_in['dN'][:, idx]
+    # dN_in['dN/dlogD'] = dN_in['dN/dlogD'][:, idx]
+    # dN_in['dV/dlogD'] = dN_in['dV/dlogD'][:, idx]
+    # dN_in['D'] = dN_in['D'][idx]
+    # dN_in['dD'] = dN_in['dD'][idx]
+    # r_orig_bins_microns = r_orig_bins_microns[idx]
+    # r_orig_bins_m = r_orig_bins_m[idx]
+    # # remake aps idx to fit the new data
+    # dN_in['aps_idx'] = dN_in['aps_idx'][:-10]
+    #
+    # if Geisinger_subsample_flag == 1:
+    #     # remove idx in geisinger idx ranges
+    #     g_idx = np.append(dN_in['smps_geisinger_idx'], dN_in['aps_geisinger_idx'][40:])
+    #     r_microns = r_microns[g_idx]
+    #     r_m = r_m[g_idx]
+    #     dN_in['aps_geisinger_idx'] = dN_in['aps_geisinger_idx'][:-40]
 
 
 
@@ -2511,6 +2511,9 @@ if __name__ == '__main__':
 
     # read in the complex index of refraction data for the aerosol species (can include water)
     n_species = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
+
+    # temporarily set water absorption to 0
+    #  n_species['H2O'] = complex(n_species['H2O'].real, 0)
 
     # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
     gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir)
@@ -2616,12 +2619,20 @@ if __name__ == '__main__':
 
     # 1 - extract particle radii from each instrument, as some need swelling, others drying
     # Original - SMPS: dry; APS: wet
-    r_d_smps_microns = r_microns[dN['smps_geisinger_idx']] # originally dry from measurements
-    r_md_aps_microns = r_microns[dN['aps_geisinger_idx']] # originally wet from measurements
+    if Geisinger_subsample_flag == 1:
+        r_d_smps_microns = r_microns[dN['smps_geisinger_idx']] # originally dry from measurements
+        r_md_aps_microns = r_microns[dN['aps_geisinger_idx']] # originally wet from measurements
 
-    # meters
-    r_d_smps_m = r_m[dN['smps_geisinger_idx']] # originally dry from measurements
-    r_md_aps_m = r_m[dN['aps_geisinger_idx']] # originally wet from measurements
+        # meters
+        r_d_smps_m = r_m[dN['smps_geisinger_idx']] # originally dry from measurements
+        r_md_aps_m = r_m[dN['aps_geisinger_idx']] # originally wet from measurements
+    else:
+        r_d_smps_microns = r_microns[dN['smps_idx']] # originally dry from measurements
+        r_md_aps_microns = r_microns[dN['aps_idx']] # originally wet from measurements
+
+        # meters
+        r_d_smps_m = r_m[dN['smps_idx']] # originally dry from measurements
+        r_md_aps_m = r_m[dN['aps_idx']] # originally wet from measurements
 
 
     # 2 - Duplicate 1D arrays so they can be appended onto varying radii from dry SMPS and wet GRIMM data
@@ -2696,6 +2707,70 @@ if __name__ == '__main__':
 
     # Caulate the physical growth factor (GF) for the particles (swollen radii / dry radii)
     GF = {aer_i: r_md_microns[aer_i] / r_d_microns[aer_i] for aer_i in aer_particles}
+
+    # ---- just the APS data
+    weighted = {aer_i: GF[aer_i][:, dN['aps_idx']] * N_weight_pm10[aer_i][:, None] for aer_i in aer_particles}
+    GF_weighted = np.sum(np.array(weighted.values()),axis=0) # do not use nansum as the sum of nan values becomes 0, not nan.
+
+
+    # save volume weighted GF for the APS ata, to shrink the data in "calc_plot_N_r_obs.py" and get N0 and r0.
+    # find which month each timestep is for
+    months = np.array([i.month for i in met['time']])
+    # what RH_frac values to interpolate S onto
+    RH_inter = np.arange(0, 1.01, 0.01)
+
+    # month, RH
+    GF_climatology = np.empty((12, 101, 51)) # month, RH, diameter
+    GF_climatology[:] = np.nan
+
+    for m_idx, m in enumerate(range(1, 11)):
+
+        # data for this month
+        bool = months == m
+
+        extract_GF = GF_weighted[bool, :]# just this month's data
+        extract_RH_frac = met['RH_frac'][bool]
+
+        # ployfit only works on non nan data so need to pull that data out, for this month.
+        idx1 = np.where(~np.isnan(extract_RH_frac))
+        idx2 = np.unique(np.where(~np.isnan(extract_GF))[0]) # rows that are good
+        idx = np.unique(np.append(idx1, idx2))
+
+        for d_idx in range(len(dN['aps_idx'])):
+            # Create the linear fit
+            z = np.polyfit(extract_RH_frac[idx], extract_GF[idx, d_idx], 1)
+            p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as GF was regressed against RH_frac)
+            # Apply the linear fit and store it in GF_climatology, for this month
+            GF_climatology[m_idx, :, d_idx] = np.array([p(RH_frac_i) for RH_frac_i in RH_inter])
+            bool = GF_climatology[m_idx, :, d_idx] < 1.0
+            GF_climatology[m_idx, bool, d_idx] = 1.0
+
+    #         # polyfit can make low GF value be unreasonable (negative) therefore make all regressed values = to the minimum
+    #         # estimated GF from the original data, for that month
+    #         if m !=7:
+    #             plt.plot(np.transpose(GF_climatology[m_idx, :]), label=str(m_idx))
+    #
+    # GF_climatology[10,:] = GF_climatology[9,:] # Nov - missing
+    # GF_climatology[11,:] = GF_climatology[9,:] # Dec - missing
+    # GF_climatology[6,:] = GF_climatology[7,:] # low sample = bad fit
+    #
+    # plt.plot(np.transpose(GF_climatology[6, :]), label=str(6))
+    # plt.plot(np.transpose(GF_climatology[10, :]), label=str(10))
+    # plt.plot(np.transpose(GF_climatology[11, :]), label=str(11))
+    # plt.legend(loc='upper left')
+
+    # for i in range(12):
+    #     plt.plot(RH_inter, GF_climatology[i, :, 20], label=str(i))
+    #
+    # # save
+    # save_dict = {'GF_climatology': GF_climatology, 'RH_frac': RH_inter}
+    # np_save_clim = pickledir +'GF_climatology_' + savestr + '_' + ceil_lambda_str + '.npy'
+    # np.save(np_save_clim, save_dict)
+
+
+
+
+
 
     # --------------------------------------------------------------
 
