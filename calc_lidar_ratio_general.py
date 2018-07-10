@@ -117,15 +117,21 @@ def read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True):
 
     return n_species
 
-def read_organic_carbon_growth_factors(ffoc_gfdir):
+def read_organic_carbon_growth_factors(ffoc_gfdir, OCtype='agedOCGF'):
 
     """
     Read in the organic carbon growth factors
+    Make sure OCtype has GF at the end so the numpy save at the end will make it clear what makes this .npy unique
     :param ffoc_gfdir:
     :return: gf_ffoc [dictionary: GF = growth factor and RH_frac = RH fraction]:
     """
+    if OCtype == 'agedOCGF':
+        gf_ffoc_raw = eu.csv_read(ffoc_gfdir + 'GF_fossilFuelOC_calcS.csv')
+    elif OCtype == 'freshOCGF':
+        gf_ffoc_raw = eu.csv_read(ffoc_gfdir + 'GF_freshFossilFuelOC.csv')
+    else:
+        raise ValueError('Organic carbon type not defined as aged or fresh. No other options present')
 
-    gf_ffoc_raw = eu.csv_read(ffoc_gfdir + 'GF_fossilFuelOC_calcS.csv')
     gf_ffoc_raw = np.array(gf_ffoc_raw)[1:, :] # skip header
     gf_ffoc = {'RH_frac': np.array(gf_ffoc_raw[:, 0], dtype=float),
                 'GF': np.array(gf_ffoc_raw[:, 1], dtype=float)}
@@ -1731,179 +1737,10 @@ def calc_r_d_species(r_microns, met, aer_i):
     # calculate interpolated values for r_md
     r_d[rh_bet_eff_del, :] = up_r_md - (frac_dup * abs_diff_r_md_dup)
 
-
-
-    ## R_M CODE ASA REFERENCE
-    # # calculate r_md for the deliquescence rh - used in linear interpolation
-    # # r_md at deliquescence point (used in interpolation)
-    # r_md_del = calc_r_md_t(r_d_microns, rh_del, alpha_factor)
-    #
-    # # idx for all values that need to have some linear interpolation
-    # bool = np.logical_and(met['RH_frac'] >= rh_eff, met['RH_frac'] <= rh_del)
-    # rh_bet_eff_del = np.where(bool == True)[0]
-    #
-    # # between efflorescence point and deliquescence point, r_md is expected to value linearly between the two
-    # low_rh = rh_eff
-    # up_rh = rh_del
-    # low_r_md = r_d_microns
-    # up_r_md = r_md_del
-    #
-    # diff_rh = up_rh - low_rh
-    # diff_r_md = r_md_del - r_d_microns
-    # abs_diff_r_md = abs(diff_r_md)
-    #
-    # # find distance rh is along linear interpolation [fraction] from lower limit
-    # # frac = np.empty(len(r_md))
-    # # frac[:] = np.nan
-    # frac = ((met['RH_frac'][rh_bet_eff_del] - low_rh) / diff_rh)
-    #
-    # # duplicate abs_diff_r_md by the number of instances needing to be interpolated - helps the calculation below
-    # #   of r_md = ...low + (frac * abs diff)
-    # abs_diff_r_md_dup = np.tile(abs_diff_r_md, (len(rh_bet_eff_del), 1))
-    # frac_dup = np.tile(frac, (len(r_d_microns), 1)).transpose()
-    #
-    # # calculate interpolated values for r_md
-    # r_md[rh_bet_eff_del, :] = low_r_md + (frac_dup * abs_diff_r_md_dup)
-
-
-
-    ## ORIG R_MD
-    # # calculate r_d for the deliquescence rh - used in linear interpolation
-    # r_d_del = calc_r_d_t(r_microns, rh_del, alpha_factor)
-    #
-    # # all values that need to have some linear interpolation
-    # bool = np.logical_and(met['RH_frac'] >= rh_eff, met['RH_frac'] <= rh_del)
-    # rh_bet_eff_del = np.where(bool == True)[0]
-    #
-    # # between efflorescence point and deliquescence point, r_md is expected to value linearly between the two
-    # low_rh = rh_eff
-    # up_rh = rh_del
-    # up_r_md = r_microns
-    # low_r_d = r_d_del
-    #
-    # diff_rh = up_rh - low_rh
-    # diff_r_md = r_microns - r_d_del
-    # abs_diff_r_md = abs(diff_r_md)
-    #
-    # # find distance rh is along linear interpolation [fraction] from lower limit
-    # # frac = np.empty(len(r_md))
-    # # frac[:] = np.nan
-    # frac = ((met['RH_frac'][rh_bet_eff_del] - low_rh) / diff_rh)
-    #
-    # # duplicate abs_diff_r_md by the number of instances needing to be interpolated - helps the calculation below
-    # #   of r_md = ...low + (frac * abs diff)
-    # abs_diff_r_md_dup = np.tile(abs_diff_r_md, (len(rh_bet_eff_del), 1))
-    # frac_dup = np.tile(frac, (len(r_microns), 1)).transpose()
-    #
-    # # calculate interpolated values for r_md
-    # r_d[rh_bet_eff_del, :] = low_r_d + (frac_dup * abs_diff_r_md_dup)
-
     return r_d
 
 
 # Optical properties
-
-### not used now
-def calculate_lidar_ratio(aer_particles, date_range, ceil_lambda, r_md_m,  n_wet, num_conc):
-
-    """
-    Calculate the lidar ratio and store all optic calculations in a single dictionary for export and pickle saving
-    :param aer_particles:
-    :param date_range:
-    :param ceil_lambda:
-    :param r_md_m:
-    :param n_wet:
-    :param num_conc:
-    :return: optics [dict]
-    """
-
-    # Calculate Q_dry for each bin and species.
-    #   The whole averaging thing up to cross sections comes later (Geisinger et al., 2016)
-
-    # Create size parameters
-    X = {}
-    for aer_i in aer_particles:
-        X[aer_i] = (2.0 * np.pi * r_md_m[aer_i])/ceil_lambda[0]
-
-    # create Q_ext and Q_back arrays ready
-    Q_ext = {}
-    Q_back = {}
-
-    C_ext = {}
-    C_back = {}
-
-    sigma_ext = {}
-    sigma_back = {}
-
-    print ''
-    print 'Calculating extinction and backscatter efficiencies...'
-
-    # 1) for aer_i in aerosols
-    for aer_i in aer_particles:
-
-        # if the aerosol has a number concentration above 0 (therefore sigma_aer_i > 0)
-        if np.nansum(num_conc[aer_i]) != 0.0:
-
-            # status tracking
-            print '  ' + aer_i
-
-            Q_ext[aer_i] = np.empty(r_md_m[aer_i].shape)
-            Q_ext[aer_i][:] = np.nan
-
-            Q_back[aer_i] = np.empty(r_md_m[aer_i].shape)
-            Q_back[aer_i][:] = np.nan
-
-            C_ext[aer_i] = np.empty(r_md_m[aer_i].shape)
-            C_ext[aer_i][:] = np.nan
-
-            C_back[aer_i] = np.empty(r_md_m[aer_i].shape)
-            C_back[aer_i][:] = np.nan
-
-            sigma_ext[aer_i] = np.empty(len(date_range))
-            sigma_ext[aer_i][:] = np.nan
-
-            sigma_back[aer_i] = np.empty(len(date_range))
-            sigma_back[aer_i][:] = np.nan
-
-            # 2) for time, t
-            for t, time_t in enumerate(date_range):
-
-                # status tracking
-                if t in np.arange(0, 35000, 1000):
-                    print '     ' + str(t)
-
-                # 3) for radii bin, r
-                for r, r_md_t_r in enumerate(r_md_m[aer_i][t, :]):
-
-                    X_t_r = X[aer_i][t, r]  # size parameter_t (for all sizes at time t)
-                    n_wet_t_r = n_wet[aer_i][t, r]  # complex index of refraction t (for all sizes at time t)
-
-
-                    if np.logical_and(~np.isnan(X_t_r), ~np.isnan(n_wet_t_r)):
-
-                        # Q_back / 4.0pi as normal .qb() is a hemispherical backscatter, and we want specifically 180 deg.
-                        particle = Mie(x=X_t_r, m=n_wet_t_r)
-                        Q_ext[aer_i][t, r] = particle.qext()
-                        Q_back[aer_i][t, r] = particle.qb() / (4.0 * np.pi)
-
-
-                        # calculate extinction cross section
-                        C_ext[aer_i][t, r] = Q_ext[aer_i][t, r] * np.pi * (r_md_t_r ** 2.0)
-                        C_back[aer_i][t, r] = Q_back[aer_i][t, r] * np.pi * (r_md_t_r ** 2.0)
-
-
-                sigma_ext[aer_i][t] = np.nansum(num_conc[aer_i][t, :] * C_ext[aer_i][t, :])
-                sigma_back[aer_i][t] = np.nansum(num_conc[aer_i][t, :] * C_back[aer_i][t, :])
-
-    sigma_ext_tot = np.nansum(sigma_ext.values(), axis=0)
-    sigma_back_tot = np.nansum(sigma_back.values(), axis=0)
-    S = sigma_ext_tot / sigma_back_tot
-
-    # store all variables in a dictionary
-    optics = {'S': S, 'Q_ext':Q_ext, 'Q_back':Q_back, 'C_ext': C_ext, 'C_back': C_back,
-              'sigma_ext': sigma_ext, 'sigma_back': sigma_back}
-
-    return optics
 
 def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md_m,  n_wet, num_conc, n_samples, r_orig_bins_m):
 
@@ -2040,6 +1877,7 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
                             C_ext_sample[g_idx_i] = Q_ext_sample[g_idx_i] * np.pi * (R_dg_wet_i ** 2.0)
                             C_back_sample[g_idx_i] = Q_back_sample[g_idx_i] * np.pi * (R_dg_wet_i ** 2.0)
 
+
                     # once Q_back/ext for all subsamples g, have been calculated, Take the average for this main r bin
                     #   Eqn 17
                     Q_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(Q_ext_sample)
@@ -2049,6 +1887,17 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
                     #   Eqn 17
                     C_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_ext_sample)
                     C_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_back_sample)
+
+                    # # original method using nansum, but nansum of nans gives 0.0 which could introduce an error.
+                    # # once Q_back/ext for all subsamples g, have been calculated, Take the average for this main r bin
+                    # #   Eqn 17
+                    # Q_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(Q_ext_sample)
+                    # Q_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(Q_back_sample)
+                    #
+                    # # once C_back/ext for all subsamples g, have been calculated, Take the average for this main r bin
+                    # #   Eqn 17
+                    # C_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_ext_sample)
+                    # C_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_back_sample)
 
                 # calculate sigma_ext/back for this aerosol
                 # sigma_ext/back_all_bins are to keep contribution at a radii level and for outputting to optics
@@ -2069,28 +1918,6 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_md
     return optics
 
 # saving
-def pickle_optics_save(pickle_savename, optics, outputSave=False, **kwargs):
-
-    """
-    Save the calculated optical properties, given that they can easily take 3+ hours to compute
-    :param pickle_savename:
-    :param optics:
-    :param pickledir:
-    :param outputSave:
-    :param kwargs:
-    :return:
-    """
-
-    pickle_save = {'site_meta':site_meta, 'optics': optics}
-    if kwargs is not None:
-        pickle_save.update(kwargs)
-    with open(pickle_savename, 'wb') as handle:
-        pickle.dump(pickle_save, handle)
-
-    if outputSave == True:
-        return pickle_save
-    else:
-        return
 
 def numpy_optics_save(np_savename, optics, outputSave=False, **kwargs):
 
@@ -2189,8 +2016,10 @@ if __name__ == '__main__':
     #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
     
     # NK: 2014 - 2016 inclusively
+    # site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
+    #     'instruments': ['SMPS', 'APS'], 'ceil_lambda': 1.064e-06}
     site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 1.064e-06}
+    'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
 
     ceil_lambda = [site_meta['ceil_lambda']]
     period = site_meta['period']
@@ -2212,12 +2041,13 @@ if __name__ == '__main__':
         soot_str = 'noSoot'
 
     # Geisinger et al., 2017 subsampling?
-    Geisinger_subsample_flag = 0
+    Geisinger_subsample_flag = 1
 
     if Geisinger_subsample_flag == 1:
         Geisinger_str = 'geisingerSample'
     else:
         Geisinger_str = ''
+        print ('Geisinger_subsample_flag is set to 0. No subsampling will occur!')
 
     # number of samples to use in geisinger sampling
     n_samples = 4.0
@@ -2308,20 +2138,22 @@ if __name__ == '__main__':
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
 
-    # # # read in any pickled S data from before
+    # # read in any pickled S data from before
     # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
 
-    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'.npy'
-    # pickle_load_in = np.load(filename).flat[0]
+    #filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_1064nm.npy'
+    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_freshOCGF.npy'
+    filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
+    pickle_load_in = np.load(filename).flat[0]
 
-    # optics = pickle_load_in['optics']
-    # S = optics['S']
-    # met = pickle_load_in['met']
-    # dN = pickle_load_in['dN']
-    # N_weight_pm10 = pickle_load_in['N_weight']
-    # pm10_mass = pickle_load_in['pm10_mass']
+    optics = pickle_load_in['optics']
+    S = optics['S']
+    met = pickle_load_in['met']
+    dN = pickle_load_in['dN']
+    N_weight_pm10 = pickle_load_in['N_weight']
+    pm10_mass = pickle_load_in['pm10_mass']
     #
     # key = 'CORG'
     # plt.figure()
@@ -2512,11 +2344,15 @@ if __name__ == '__main__':
     # read in the complex index of refraction data for the aerosol species (can include water)
     n_species = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
 
-    # temporarily set water absorption to 0
-    #  n_species['H2O'] = complex(n_species['H2O'].real, 0)
+    # temporarily set OC absorption to 0
+    n_species['CBLK'] = complex(n_species['CBLK'].real, 0.44)
+    # n_species['CORG'] = complex(n_species['CORG'].real, 0.01)
 
     # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
-    gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir)
+    OC_meta = {'type': 'agedOCGF', 'extra': 'BCimag0.44'}
+    gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir, OCtype=OC_meta['type'])
+    print 'OC meta = '
+    print OC_meta
 
 
     ## Read in species by mass data
@@ -2708,42 +2544,42 @@ if __name__ == '__main__':
     # Caulate the physical growth factor (GF) for the particles (swollen radii / dry radii)
     GF = {aer_i: r_md_microns[aer_i] / r_d_microns[aer_i] for aer_i in aer_particles}
 
-    # ---- just the APS data
-    weighted = {aer_i: GF[aer_i][:, dN['aps_idx']] * N_weight_pm10[aer_i][:, None] for aer_i in aer_particles}
-    GF_weighted = np.sum(np.array(weighted.values()),axis=0) # do not use nansum as the sum of nan values becomes 0, not nan.
-
-
-    # save volume weighted GF for the APS ata, to shrink the data in "calc_plot_N_r_obs.py" and get N0 and r0.
-    # find which month each timestep is for
-    months = np.array([i.month for i in met['time']])
-    # what RH_frac values to interpolate S onto
-    RH_inter = np.arange(0, 1.01, 0.01)
-
-    # month, RH
-    GF_climatology = np.empty((12, 101, 51)) # month, RH, diameter
-    GF_climatology[:] = np.nan
-
-    for m_idx, m in enumerate(range(1, 11)):
-
-        # data for this month
-        bool = months == m
-
-        extract_GF = GF_weighted[bool, :]# just this month's data
-        extract_RH_frac = met['RH_frac'][bool]
-
-        # ployfit only works on non nan data so need to pull that data out, for this month.
-        idx1 = np.where(~np.isnan(extract_RH_frac))
-        idx2 = np.unique(np.where(~np.isnan(extract_GF))[0]) # rows that are good
-        idx = np.unique(np.append(idx1, idx2))
-
-        for d_idx in range(len(dN['aps_idx'])):
-            # Create the linear fit
-            z = np.polyfit(extract_RH_frac[idx], extract_GF[idx, d_idx], 1)
-            p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as GF was regressed against RH_frac)
-            # Apply the linear fit and store it in GF_climatology, for this month
-            GF_climatology[m_idx, :, d_idx] = np.array([p(RH_frac_i) for RH_frac_i in RH_inter])
-            bool = GF_climatology[m_idx, :, d_idx] < 1.0
-            GF_climatology[m_idx, bool, d_idx] = 1.0
+    # # ---- just the APS data
+    # weighted = {aer_i: GF[aer_i][:, dN['aps_idx']] * N_weight_pm10[aer_i][:, None] for aer_i in aer_particles}
+    # GF_weighted = np.sum(np.array(weighted.values()),axis=0) # do not use nansum as the sum of nan values becomes 0, not nan.
+    #
+    #
+    # # save volume weighted GF for the APS ata, to shrink the data in "calc_plot_N_r_obs.py" and get N0 and r0.
+    # # find which month each timestep is for
+    # months = np.array([i.month for i in met['time']])
+    # # what RH_frac values to interpolate S onto
+    # RH_inter = np.arange(0, 1.01, 0.01)
+    #
+    # # month, RH
+    # GF_climatology = np.empty((12, 101, 51)) # month, RH, diameter
+    # GF_climatology[:] = np.nan
+    #
+    # for m_idx, m in enumerate(range(1, 11)):
+    #
+    #     # data for this month
+    #     bool = months == m
+    #
+    #     extract_GF = GF_weighted[bool, :]# just this month's data
+    #     extract_RH_frac = met['RH_frac'][bool]
+    #
+    #     # ployfit only works on non nan data so need to pull that data out, for this month.
+    #     idx1 = np.where(~np.isnan(extract_RH_frac))
+    #     idx2 = np.unique(np.where(~np.isnan(extract_GF))[0]) # rows that are good
+    #     idx = np.unique(np.append(idx1, idx2))
+    #
+    #     for d_idx in range(len(dN['aps_idx'])):
+    #         # Create the linear fit
+    #         z = np.polyfit(extract_RH_frac[idx], extract_GF[idx, d_idx], 1)
+    #         p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as GF was regressed against RH_frac)
+    #         # Apply the linear fit and store it in GF_climatology, for this month
+    #         GF_climatology[m_idx, :, d_idx] = np.array([p(RH_frac_i) for RH_frac_i in RH_inter])
+    #         bool = GF_climatology[m_idx, :, d_idx] < 1.0
+    #         GF_climatology[m_idx, bool, d_idx] = 1.0
 
     #         # polyfit can make low GF value be unreasonable (negative) therefore make all regressed values = to the minimum
     #         # estimated GF from the original data, for that month
@@ -2783,10 +2619,7 @@ if __name__ == '__main__':
 
     print 'calculating optical properties...'
     # The main beast. Calculate all the optical properties, and outputs the lidar ratio
-    if Geisinger_subsample_flag == 0:
-        optics = calculate_lidar_ratio(aer_particles, met['time'], ceil_lambda, r_md_m,  n_wet, num_conc)
-    else:
-        optics = calculate_lidar_ratio_geisinger(aer_particles, met['time'], ceil_lambda, r_md_m,  n_wet, num_conc,
+    optics = calculate_lidar_ratio_geisinger(aer_particles, met['time'], ceil_lambda, r_md_m,  n_wet, num_conc,
                                     n_samples, r_orig_bins_m)
 
     # extract out the lidar ratio
@@ -2800,10 +2633,10 @@ if __name__ == '__main__':
         # pickle_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str_nm+'.pickle'
         # pickle_save = pickle_optics_save(pickle_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
         #             ceil_lambda=ceil_lambda)
-
-        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'.npy'
+        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.npy'
         np_save = numpy_optics_save(np_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
-                    ceil_lambda=ceil_lambda)
+                    ceil_lambda=ceil_lambda, r_md_m=r_md_m)
+        print np_savename + ' is saved!'
 
     # ------------------------------------------
 
@@ -2812,77 +2645,77 @@ if __name__ == '__main__':
 
     # ------------------------------------------
 
-    # get mean and nanstd from data
-    # set up the date range to fill (e.g. want daily statistics then stats_date_range = daily resolution)
-    # stats = eu.simple_statistics(S, date_range, stats_date_range, np.nanmean, np.nanstd, np.nanmedian)
-    stats_date_range = np.array(eu.date_range(met['time'][0], met['time'][-1] + dt.timedelta(days=1), 1, 'days'))
+    # # get mean and nanstd from data
+    # # set up the date range to fill (e.g. want daily statistics then stats_date_range = daily resolution)
+    # # stats = eu.simple_statistics(S, date_range, stats_date_range, np.nanmean, np.nanstd, np.nanmedian)
+    # stats_date_range = np.array(eu.date_range(met['time'][0], met['time'][-1] + dt.timedelta(days=1), 1, 'days'))
+    #
+    # stats ={}
+    #
+    # for stat_i in ['mean', 'median', 'stdev', '25pct', '75pct']:
+    #     stats[stat_i] = np.empty(len(stats_date_range))
+    #     stats[stat_i][:] = np.nan
+    #
+    # # create statistics
+    # for t, start, end in zip(np.arange(len(stats_date_range[:-1])), stats_date_range[:-1], stats_date_range[1:]):
+    #
+    #     # get location of time period's data
+    #     bool = np.logical_and(met['time'] >=start, met['time']<=end)
+    #
+    #     # extract data
+    #     subsample = S[bool]
+    #
+    #     stats['mean'][t] = np.nanmean(subsample)
+    #     stats['stdev'][t] = np.nanstd(subsample)
+    #     stats['median'][t] = np.nanmedian(subsample)
+    #     stats['25pct'][t] = np.percentile(subsample, 25)
+    #     stats['75pct'][t] = np.percentile(subsample, 75)
 
-    stats ={}
+    # # TIMESERIES - S - stats
+    # # plot daily statistics of S
+    # fig, ax = plt.subplots(1,1,figsize=(8, 5))
+    # ax.plot_date(stats_date_range, stats['mean'], fmt='-')
+    # ax.fill_between(stats_date_range, stats['mean'] - stats['stdev'], stats['mean'] + stats['stdev'], alpha=0.3, facecolor='blue')
+    # plt.suptitle('Lidar Ratio:\n'+savesub+'masses; equal Number weighting per rbin; ClearfLo winter N(r)')
+    # plt.xlabel('Date [dd/mm]')
+    # # plt.ylim([20.0, 60.0])
+    # ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
+    # plt.ylabel('Lidar Ratio')
+    # plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_dailybinned_'+ceil_lambda_str+'.png')
+    # # plt.savefig(savedir + 'S_'+year+'_'+process_type+'_'+Geisinger_str+'_dailybinned_lt60_'+ceil_lambda_str_nm+'.png')
+    # plt.close(fig)
 
-    for stat_i in ['mean', 'median', 'stdev', '25pct', '75pct']:
-        stats[stat_i] = np.empty(len(stats_date_range))
-        stats[stat_i][:] = np.nan
+    # # HISTOGRAM - S
+    # idx = np.logical_or(np.isnan(S), np.isnan(met['RH']))
+    #
+    # # plot all the S in raw form (hist)
+    # fig, ax = plt.subplots(1,1,figsize=(8, 5))
+    # # ax.hist(S)
+    # ax.hist(S[~idx])
+    # plt.suptitle('Lidar Ratio:\n'+savesub+' masses; equal Number weighting per rbin; ClearfLo winter N(r)')
+    # plt.xlabel('Lidar Ratio')
+    # plt.ylabel('Frequency')
+    # plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_histogram_'+ceil_lambda_str+'.png')
+    # plt.close(fig)
 
-    # create statistics
-    for t, start, end in zip(np.arange(len(stats_date_range[:-1])), stats_date_range[:-1], stats_date_range[1:]):
+    # # TIMESERIES - S - not binned
+    # # plot all the S in raw form (plot_date)
+    # fig, ax = plt.subplots(1,1,figsize=(8, 5))
+    # ax.plot_date(met['time'], S, fmt='-')
+    # plt.suptitle('Lidar Ratio:'+savesub+'\n masses; equal Number weighting per rbin; '+savestr + ' ' + site_meta['period'])
+    # plt.xlabel('Date [dd/mm]')
+    # ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
+    # plt.ylabel('Lidar Ratio [sr]')
+    # plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_timeseries_'+ceil_lambda_str_nm+'.png')
+    # plt.close(fig)
 
-        # get location of time period's data
-        bool = np.logical_and(met['time'] >=start, met['time']<=end)
-
-        # extract data
-        subsample = S[bool]
-
-        stats['mean'][t] = np.nanmean(subsample)
-        stats['stdev'][t] = np.nanstd(subsample)
-        stats['median'][t] = np.nanmedian(subsample)
-        stats['25pct'][t] = np.percentile(subsample, 25)
-        stats['75pct'][t] = np.percentile(subsample, 75)
-
-    # TIMESERIES - S - stats
-    # plot daily statistics of S
-    fig, ax = plt.subplots(1,1,figsize=(8, 5))
-    ax.plot_date(stats_date_range, stats['mean'], fmt='-')
-    ax.fill_between(stats_date_range, stats['mean'] - stats['stdev'], stats['mean'] + stats['stdev'], alpha=0.3, facecolor='blue')
-    plt.suptitle('Lidar Ratio:\n'+savesub+'masses; equal Number weighting per rbin; ClearfLo winter N(r)')
-    plt.xlabel('Date [dd/mm]')
-    # plt.ylim([20.0, 60.0])
-    ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
-    plt.ylabel('Lidar Ratio')
-    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_dailybinned_'+ceil_lambda_str+'.png')
-    # plt.savefig(savedir + 'S_'+year+'_'+process_type+'_'+Geisinger_str+'_dailybinned_lt60_'+ceil_lambda_str_nm+'.png')
-    plt.close(fig)
-
-    # HISTOGRAM - S
-    idx = np.logical_or(np.isnan(S), np.isnan(met['RH']))
-
-    # plot all the S in raw form (hist)
-    fig, ax = plt.subplots(1,1,figsize=(8, 5))
-    # ax.hist(S)
-    ax.hist(S[~idx])
-    plt.suptitle('Lidar Ratio:\n'+savesub+' masses; equal Number weighting per rbin; ClearfLo winter N(r)')
-    plt.xlabel('Lidar Ratio')
-    plt.ylabel('Frequency')
-    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_histogram_'+ceil_lambda_str+'.png')
-    plt.close(fig)
-
-    # TIMESERIES - S - not binned
-    # plot all the S in raw form (plot_date)
-    fig, ax = plt.subplots(1,1,figsize=(8, 5))
-    ax.plot_date(met['time'], S, fmt='-')
-    plt.suptitle('Lidar Ratio:'+savesub+'\n masses; equal Number weighting per rbin; '+savestr + ' ' + site_meta['period'])
-    plt.xlabel('Date [dd/mm]')
-    ax.xaxis.set_major_formatter(DateFormatter('%d/%m'))
-    plt.ylabel('Lidar Ratio [sr]')
-    plt.savefig(savedir + 'S_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_timeseries_'+ceil_lambda_str_nm+'.png')
-    plt.close(fig)
-
-    # Pearson and Spearman correlation
-    # WARNING spearman and pearson correlations give erronous values if nan values are present!!!!!
-    idx1 = np.where(~np.isnan(met['RH']))
-    idx2 = np.where(~np.isnan(S))
-    idx = np.unique(np.append(idx1, idx2))
-    corr_pearson = pearsonr(met['RH'][idx], S[idx])
-    corr_spearman = spearmanr(met['RH'][idx], S[idx])
+    # # Pearson and Spearman correlation
+    # # WARNING spearman and pearson correlations give erronous values if nan values are present!!!!!
+    # idx1 = np.where(~np.isnan(met['RH']))
+    # idx2 = np.where(~np.isnan(S))
+    # idx = np.unique(np.append(idx1, idx2))
+    # corr_pearson = pearsonr(met['RH'][idx], S[idx])
+    # corr_spearman = spearmanr(met['RH'][idx], S[idx])
 
     # SCATTER - S vs RH (PM1)
     # quick plot 15 min S and RH for 2016.
@@ -2902,186 +2735,217 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.suptitle(ceil_lambda_str)
     # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
-    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'.png')
+    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.png')
     plt.close(fig)
 
     # ------------------------------------------------
 
-    # LINE - wet and dry diameters
-
-    idx = np.where(met['RH'] >= 0.0)
-
-    fig = plt.figure()
-    colours = ['red', 'blue', 'green', 'black', 'purple']
-    for i, aer_i in enumerate(aer_particles):
-
-        plt.semilogy(np.nanmean(r_d_m[aer_i][idx], axis=0), color=colours[i], linestyle = '-', label=aer_i + ' dry')
-        plt.semilogy(np.nanmean(r_md_m[aer_i][idx], axis=0), color=colours[i], linestyle='--', label=aer_i + ' wet')
-    plt.legend(loc='best')
+    # # LINE - wet and dry diameters
+    #
+    # idx = np.where(met['RH'] >= 0.0)
+    #
+    # fig = plt.figure()
+    # colours = ['red', 'blue', 'green', 'black', 'purple']
+    # for i, aer_i in enumerate(aer_particles):
+    #
+    #     plt.semilogy(np.nanmean(r_d_m[aer_i][idx], axis=0), color=colours[i], linestyle = '-', label=aer_i + ' dry')
+    #     plt.semilogy(np.nanmean(r_md_m[aer_i][idx], axis=0), color=colours[i], linestyle='--', label=aer_i + ' wet')
+    # plt.legend(loc='best')
 
     #plot original dry and wet radii
 
     # ------------------------------------------------
 
-    # SCATTER - DIAG - wet and dry diameters
-
-    bool = met['RH'] >= 0.0
-
-    fig = plt.figure()
-    colours = ['red', 'blue', 'green', 'black', 'purple']
-    for i, aer_i in enumerate(aer_particles): #enumerate(['NaCl']): # enumerate(['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG']): # #enumerate(['NaCl']):
-        ax = plt.gca()
-
-        # scatter does not work well here due to needing a log scale! Known bug in python:
-        #      # https://github.com/matplotlib/matplotlib/issues/6915
-        # allow auto scaling to log by plt.plot()
-        #plt.plot(met['RH'][bool], r_md_m[aer_i][bool, 20], color=colours[i], linewidth=0, marker='o', label=aer_i + ' wet')
-        plt.plot(met['RH'][bool], r_d_m[aer_i][bool, 300], color=colours[i], linewidth=0, marker='o', label=aer_i + ' dry')
-        #ax.axis('tight')
-
-
-
-        #ax.set_ylim([np.nanmin(r_md_m[aer_i][bool, 20]), np.nanmax(r_md_m[aer_i][bool, 20])])
-    plt.legend(loc='best')
-
-    # broken aps welling is below
-    # broken_r_d_m = deepcopy(r_d_m)
+    # # SCATTER - DIAG - wet and dry diameters
+    #
+    # bool = met['RH'] >= 0.0
+    #
+    # fig = plt.figure()
+    # colours = ['red', 'blue', 'green', 'black', 'purple']
+    # for i, aer_i in enumerate(aer_particles): #enumerate(['NaCl']): # enumerate(['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG']): # #enumerate(['NaCl']):
+    #     ax = plt.gca()
+    #
+    #     # scatter does not work well here due to needing a log scale! Known bug in python:
+    #     #      # https://github.com/matplotlib/matplotlib/issues/6915
+    #     # allow auto scaling to log by plt.plot()
+    #     #plt.plot(met['RH'][bool], r_md_m[aer_i][bool, 20], color=colours[i], linewidth=0, marker='o', label=aer_i + ' wet')
+    #     plt.plot(met['RH'][bool], r_d_m[aer_i][bool, 300], color=colours[i], linewidth=0, marker='o', label=aer_i + ' dry')
+    #     #ax.axis('tight')
+    #
+    #
+    #
+    #     #ax.set_ylim([np.nanmin(r_md_m[aer_i][bool, 20]), np.nanmax(r_md_m[aer_i][bool, 20])])
+    # plt.legend(loc='best')
+    #
+    # # broken aps welling is below
+    # # broken_r_d_m = deepcopy(r_d_m)
 
     # ------------------------------------------------
 
-    # BOX PLOT - S binned by RH, then by soot
+    # # BOX PLOT - S binned by RH, then by soot
+    #
+    # ## 1. set up bins to divide the data [%]
+    # rh_bin_starts = np.array([0.0, 60.0, 70.0, 80.0, 90.0])
+    # rh_bin_ends = np.append(rh_bin_starts[1:], 100.0)
+    #
+    # # set up limit for soot last bin to be inf [fraction]
+    # soot_starts = np.array([0.0, 0.04, 0.08])
+    # soot_ends = np.append(soot_starts[1:], np.inf)
+    # soot_bins_num = len(soot_starts)
+    #
+    # # variables to help plot the legend
+    # soot_starts_str = [str(int(i*100.0)) for i in soot_starts]
+    # soot_ends_str = [str(int(i*100.0)) for i in soot_ends[:-1]] + ['100']
+    # soot_legend_str = [i+'-'+j+' %' for i, j in zip(soot_starts_str, soot_ends_str)]
+    # soot_colours = ['blue', 'orange', 'red']
+    #
+    # # positions for each boxplot (1/6, 3/6, 5/6 into each bin, given 3 soot groups)
+    # #   and widths for each boxplot
+    # pos = []
+    # widths = []
+    # mid = []
+    #
+    # for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
+    #
+    #     bin_6th = (rh_e-rh_s) * 1.0/6.0 # 1/6th of the current bin width
+    #     pos += [[rh_s + bin_6th, rh_s +(3*bin_6th), rh_s+(5*bin_6th)]] #1/6, 3/6, 5/6 into each bin for the soot boxplots
+    #     widths += [bin_6th]
+    #     mid += [rh_s +(3*bin_6th)]
+    #
+    #
+    # # Split the data - keep them in lists to preserve the order when plotting
+    # # bin_range_str will match each set of lists in rh_binned
+    # rh_split = {'binned': [], 'mean': [], 'n': [], 'bin_range_str': [], 'pos': []}
+    #
+    # for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
+    #
+    #     # bin range
+    #     rh_split['bin_range_str'] += [str(int(rh_s)) + '-' + str(int(rh_e))]
+    #
+    #     # the list of lists for this RH bin (the actual data, the mean and sample number)
+    #     rh_bin_i = []
+    #     rh_bin_mean_i = []
+    #     rh_bin_n_i = []
+    #
+    #     # extract out all S values that occured for this RH range and their corresponding CBLK weights
+    #     rh_bool = np.logical_and(met['RH'] >= rh_s, met['RH'] < rh_e)
+    #     S_rh_i = S[rh_bool]
+    #     N_weight_cblk_rh_i = N_weight_pm10['CBLK'][rh_bool]
+    #
+    #     # idx of binned data
+    #     for soot_s, soot_e in zip(soot_starts, soot_ends):
+    #
+    #         # booleon for the soot data, for this rh subsample
+    #         soot_bool = np.logical_and(N_weight_cblk_rh_i >= soot_s, N_weight_cblk_rh_i < soot_e)
+    #         S_rh_i_soot_j = S_rh_i[soot_bool] # soot subsample from the rh subsample
+    #
+    #
+    #         # store the values for this bin
+    #         rh_bin_i += [S_rh_i_soot_j] # the of subsample
+    #         rh_bin_mean_i += [np.mean(S_rh_i_soot_j)] # mean of of subsample
+    #         rh_bin_n_i += [len(S_rh_i_soot_j)] # number of subsample
+    #
+    #     # add each set of rh_bins onto the full set of rh_bins
+    #     rh_split['binned'] += [rh_bin_i]
+    #     rh_split['mean'] += [rh_bin_mean_i]
+    #     rh_split['n'] += [rh_bin_n_i]
+    #
+    #
+    # ## 2. Start the boxplots
+    # # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
+    # fig = plt.figure(figsize=(7, 3.5))
+    # # fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
+    # # plt.hold(True)
+    # for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
+    #
+    #     bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], sym='x')
+    #
+    #     # colour the boxplots
+    #     for c, colour_c in enumerate(soot_colours):
+    #
+    #         # some parts of the boxplots are in two parts (e.g. 2 caps for each boxplot) therefore make an x_idx
+    #         #   for each pair
+    #         c_pair_idx = range(2*c, (2*c)+(len(soot_colours)-1))
+    #
+    #         plt.setp(bp['boxes'][c], color=colour_c)
+    #         plt.setp(bp['medians'][c], color=colour_c)
+    #         [plt.setp(bp['caps'][i], color=colour_c) for i in c_pair_idx]
+    #         [plt.setp(bp['whiskers'][i], color=colour_c) for i in c_pair_idx]
+    #         #[plt.setp(bp['fliers'][i], color=colour_c) for i in c_pair_idx]
+    #
+    # print 'test'
+    # # add sample number at the top of each box
+    # (y_min, y_max) = ax.get_ylim()
+    # upperLabels = [str(np.round(n, 2)) for n in np.hstack(rh_split['n'])]
+    # for tick in range(len(np.hstack(pos))):
+    #     k = tick % 3
+    #     ax.text(np.hstack(pos)[tick], y_max - (y_max * (0.05)*(k+1)), upperLabels[tick],
+    #              horizontalalignment='center', size='x-small')
+    #
+    # ## 3. Prettify boxplot (legend, vertical lines, sample size at top)
+    # # prettify
+    # ax.set_xlim([0.0, 100.0])
+    # ax.set_xticks(mid)
+    # ax.set_xticklabels(rh_split['bin_range_str'])
+    # ax.set_ylabel(r'$S \/[sr]$')
+    # ax.set_xlabel(r'$RH \/[\%]$')
+    #
+    #
+    # # add vertical dashed lines to split the groups up
+    # (y_min, y_max) = ax.get_ylim()
+    # for rh_e in rh_bin_ends:
+    #     plt.vlines(rh_e, y_min, y_max, alpha=0.3, color='grey', linestyle='--')
+    #
+    # # draw temporary lines to create a legend
+    # lin=[]
+    # for c, colour_c in enumerate(soot_colours):
+    #     lin_i, = plt.plot([np.nanmean(S),np.nanmean(S)],color=colour_c) # plot line with matching colour
+    #     lin += [lin_i] # keep the line handle in a list for the legend plotting
+    # plt.legend(lin, soot_legend_str, fontsize=10, loc=(0.02,0.68))
+    # [i.set_visible(False) for i in lin] # set the line to be invisible
+    #
+    # plt.tight_layout()
+    #
+    # ## 4. Save fig as unique image
+    # i = 1
+    # savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
+    # while os.path.exists(savepath) == True:
+    #     i += 1
+    #     savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
+    #
+    # plt.savefig(savepath)
 
-    ## 1. set up bins to divide the data [%]
-    rh_bin_starts = np.array([0.0, 60.0, 70.0, 80.0, 90.0])
-    rh_bin_ends = np.append(rh_bin_starts[1:], 100.0)
 
-    # set up limit for soot last bin to be inf [fraction]
-    soot_starts = np.array([0.0, 0.04, 0.08])
-    soot_ends = np.append(soot_starts[1:], np.inf)
-    soot_bins_num = len(soot_starts)
+     # ---------------------------------------
 
-    # variables to help plot the legend
-    soot_starts_str = [str(int(i*100.0)) for i in soot_starts]
-    soot_ends_str = [str(int(i*100.0)) for i in soot_ends[:-1]] + ['100']
-    soot_legend_str = [i+'-'+j+' %' for i, j in zip(soot_starts_str, soot_ends_str)]
-    soot_colours = ['blue', 'orange', 'red']
-
-    # positions for each boxplot (1/6, 3/6, 5/6 into each bin, given 3 soot groups)
-    #   and widths for each boxplot
-    pos = []
-    widths = []
-    mid = []
-
-    for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
-
-        bin_6th = (rh_e-rh_s) * 1.0/6.0 # 1/6th of the current bin width
-        pos += [[rh_s + bin_6th, rh_s +(3*bin_6th), rh_s+(5*bin_6th)]] #1/6, 3/6, 5/6 into each bin for the soot boxplots
-        widths += [bin_6th]
-        mid += [rh_s +(3*bin_6th)]
-
-
-    # Split the data - keep them in lists to preserve the order when plotting
-    # bin_range_str will match each set of lists in rh_binned
-    rh_split = {'binned': [], 'mean': [], 'n': [], 'bin_range_str': [], 'pos': []}
-
-    for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
-
-        # bin range
-        rh_split['bin_range_str'] += [str(int(rh_s)) + '-' + str(int(rh_e))]
-
-        # the list of lists for this RH bin (the actual data, the mean and sample number)
-        rh_bin_i = []
-        rh_bin_mean_i = []
-        rh_bin_n_i = []
-
-        # extract out all S values that occured for this RH range and their corresponding CBLK weights
-        rh_bool = np.logical_and(met['RH'] >= rh_s, met['RH'] < rh_e)
-        S_rh_i = S[rh_bool]
-        N_weight_cblk_rh_i = N_weight_pm10['CBLK'][rh_bool]
-
-        # idx of binned data
-        for soot_s, soot_e in zip(soot_starts, soot_ends):
-
-            # booleon for the soot data, for this rh subsample
-            soot_bool = np.logical_and(N_weight_cblk_rh_i >= soot_s, N_weight_cblk_rh_i < soot_e)
-            S_rh_i_soot_j = S_rh_i[soot_bool] # soot subsample from the rh subsample
-
-
-            # store the values for this bin
-            rh_bin_i += [S_rh_i_soot_j] # the of subsample
-            rh_bin_mean_i += [np.mean(S_rh_i_soot_j)] # mean of of subsample
-            rh_bin_n_i += [len(S_rh_i_soot_j)] # number of subsample
-
-        # add each set of rh_bins onto the full set of rh_bins
-        rh_split['binned'] += [rh_bin_i]
-        rh_split['mean'] += [rh_bin_mean_i]
-        rh_split['n'] += [rh_bin_n_i]
-
-
-    ## 2. Start the boxplots
-    # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
-    fig = plt.figure(figsize=(7, 3.5))
-    # fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
-    # plt.hold(True)
-    for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
-
-        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], sym='x')
-
-        # colour the boxplots
-        for c, colour_c in enumerate(soot_colours):
-
-            # some parts of the boxplots are in two parts (e.g. 2 caps for each boxplot) therefore make an x_idx
-            #   for each pair
-            c_pair_idx = range(2*c, (2*c)+(len(soot_colours)-1))
-
-            plt.setp(bp['boxes'][c], color=colour_c)
-            plt.setp(bp['medians'][c], color=colour_c)
-            [plt.setp(bp['caps'][i], color=colour_c) for i in c_pair_idx]
-            [plt.setp(bp['whiskers'][i], color=colour_c) for i in c_pair_idx]
-            #[plt.setp(bp['fliers'][i], color=colour_c) for i in c_pair_idx]
-
-    print 'test'
-    # add sample number at the top of each box
-    (y_min, y_max) = ax.get_ylim()
-    upperLabels = [str(np.round(n, 2)) for n in np.hstack(rh_split['n'])]
-    for tick in range(len(np.hstack(pos))):
-        k = tick % 3
-        ax.text(np.hstack(pos)[tick], y_max - (y_max * (0.05)*(k+1)), upperLabels[tick],
-                 horizontalalignment='center', size='x-small')
-
-    ## 3. Prettify boxplot (legend, vertical lines, sample size at top)
-    # prettify
-    ax.set_xlim([0.0, 100.0])
-    ax.set_xticks(mid)
-    ax.set_xticklabels(rh_split['bin_range_str'])
-    ax.set_ylabel(r'$S \/[sr]$')
-    ax.set_xlabel(r'$RH \/[\%]$')
-
-
-    # add vertical dashed lines to split the groups up
-    (y_min, y_max) = ax.get_ylim()
-    for rh_e in rh_bin_ends:
-        plt.vlines(rh_e, y_min, y_max, alpha=0.3, color='grey', linestyle='--')
-
-    # draw temporary lines to create a legend
-    lin=[]
-    for c, colour_c in enumerate(soot_colours):
-        lin_i, = plt.plot([np.nanmean(S),np.nanmean(S)],color=colour_c) # plot line with matching colour
-        lin += [lin_i] # keep the line handle in a list for the legend plotting
-    plt.legend(lin, soot_legend_str, fontsize=10, loc=(0.02,0.68))
-    [i.set_visible(False) for i in lin] # set the line to be invisible
-
-    plt.tight_layout()
-
-    ## 4. Save fig as unique image
-    i = 1
-    savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
-    while os.path.exists(savepath) == True:
-        i += 1
-        savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
-
-    plt.savefig(savepath)
-
-
+    # # LINE PLOT OF EXTINCTION COEFFICIENT
+    # num_conc = pickle_load_in['num_conc']
+    # C_ext = pickle_load_in['optics']['C_ext']
+    # C_back = pickle_load_in['optics']['C_back']
+    # t_range = range(num_conc['CBLK'].shape[0])
+    # D_range = range(num_conc['CBLK'].shape[1])
+    # # need r_md_m to plot on the x axis
+    #
+    # sigma_ext_avg= {aer_i: np.empty(len(D_range)) for aer_i in aer_particles}
+    # sigma_back_avg= {aer_i: np.empty(len(D_range)) for aer_i in aer_particles}
+    #
+    # for aer_i in aer_particles:
+    #     sigma_ext_avg[aer_i][:] = np.nan
+    #     sigma_back_avg[aer_i][:] = np.nan
+    #
+    #
+    # for aer_i in aer_particles:
+    #     sigma_ext_avg[aer_i] = np.nanmean(num_conc[aer_i], axis=0) * np.nanmean(C_ext[aer_i], axis=0)
+    #     sigma_back_avg[aer_i] = np.nanmean(num_conc[aer_i], axis=0) * np.nanmean(C_back[aer_i], axis=0)
+    #
+    # # calc average sigma for each average diameter bin
+    #
+    # # stack data and plot
+    # stack = np.zeros(len(D_range)) # start at 0
+    # plt.figure()
+    # ax = plt.gca()
+    # for aer_i in aer_particles:
+    #
+    #     plt.plot(stack)
 
     print 'END PROGRAM'
