@@ -399,6 +399,39 @@ def trim_mass_wxt_times(mass, WXT):
 
 # Process
 
+# recalculate particle bin parameters
+def calc_bin_parameters_general(D):
+
+    """
+    Calculate bin parameters for the data
+    headers are floats within a list, unlike aps which were keys within a dictionary
+    :param N:
+    :return:
+    """
+
+    # bin max -> the bin + half way to the next bin
+    D_diffs = D[:, 1:] - D[:, :-1] # checked
+    D_max = D[:, :-1] + (D_diffs / 2.0) # checked
+
+    # upper edge difference for the last bin is assumed be equal to the upper edge difference of the second to last bin
+    #   therefore add the upper edge difference of the second to last bin, to the last bin.
+    # D_max = np.append(D_max, D[:, -1] + (D_diffs[:, -1]/2.0)) # checked # orig
+    D_max = np.hstack((D_max, (D[:, -1] + (D_diffs[:, -1] / 2.0))[:, None]))
+
+    # lower edge difference for the first bin is assumed to be equal to the lower edge difference of the second bin,
+    #   therefore subtract the lower edge difference of the second bin, from the first bin.
+    # lower edge of subsequent bins = upper edge of the previous bin, hence using D_max[:-1]
+    D_min = np.hstack(((D[:, 0] - (D_diffs[:, 0]/2.0))[:, None], D_max[:, :-1])) # checked
+
+    # bin parameters
+    logD = np.log10(D)
+
+    # bin widths
+    dD = D_max - D_min
+    dlogD = np.log10(D_max) - np.log10(D_min)
+
+    return dD, logD, dlogD
+
 ## data in processing
 
 def Geisinger_increase_r_bins(dN, r_orig_bins_microns, n_samples=4.0):
@@ -2101,6 +2134,9 @@ if __name__ == '__main__':
     aer_names = {'(NH4)2SO4': 'Ammonium sulphate', 'NH4NO3': 'Ammonium nitrate',
                 'CORG': 'Organic carbon', 'NaCl': 'Generic NaCl', 'CBLK':'Soot', 'MURK': 'MURK'}
 
+    aer_colours = {'(NH4)2SO4': 'red', 'NH4NO3': 'orange',
+                   'CORG': [0.05, 0.9, 0.4], 'NaCl': 'magenta', 'CBLK':'brown'}
+
     # raw data used to make aerosols
     orig_particles = ['CORG', 'CL', 'CBLK', 'NH4', 'SO4', 'NO3']
 
@@ -2124,7 +2160,7 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2015'
+    year = '2014'
     year_str = str(year)
 
     # ============================================
@@ -2143,9 +2179,9 @@ if __name__ == '__main__':
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
 
-    #filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_1064nm.npy'
+    filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905nm.npy'
     # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_freshOCGF.npy'
-    filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
+    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
     pickle_load_in = np.load(filename).flat[0]
 
     optics = pickle_load_in['optics']
@@ -2154,6 +2190,8 @@ if __name__ == '__main__':
     dN = pickle_load_in['dN']
     N_weight_pm10 = pickle_load_in['N_weight']
     pm10_mass = pickle_load_in['pm10_mass']
+    time = pickle_load_in['met']['time']
+
     #
     # key = 'CORG'
     # plt.figure()
@@ -2168,6 +2206,34 @@ if __name__ == '__main__':
     # plt.suptitle('NK')
     # plt.ylabel('dV/dlogD')
     # plt.xlabel('D [microns]')
+
+    # Resave the npy arrays so the UTC timestamp is removed.
+    # remove the UTC timestamp on the array so it can be easily imported on a windows system
+    # pickle_load_in['met']['time'] = np.array([i.replace(tzinfo=None) for i in pickle_load_in['met']['time']])
+    # del pickle_load_in['dN']['time']
+    # del pickle_load_in['pm10_mass']['time']
+    # np.save(filename, pickle_load_in)
+    # print filename + ' has been resaved!'
+
+    # r_d_smps_microns = r_microns[dN['smps_idx']] # originally dry from measurements
+    # r_md_aps_microns = r_microns[dN['aps_idx']] # originally wet from measurements
+    # # meters
+    # r_d_smps_m = r_m[dN['smps_idx']] # originally dry from measurements
+    # r_md_aps_m = r_m[dN['aps_idx']] # originally wet from measurements
+
+    # r_microns = pickle_load_in['dN']['D'] * 1e-03 / 2.0
+    # r_m = pickle_load_in['dN']['D'] * 1e-09 / 2.0
+    # r_d_smps_microns = r_microns[pickle_load_in['dN']['smps_idx']] # originally dry from measurements
+    # r_md_aps_microns = r_microns[pickle_load_in['dN']['aps_idx']] # originally wet from measurements
+    # r_d_smps_m = r_m[pickle_load_in['dN']['smps_idx']] # originally dry from measurements
+    # r_md_aps_m = r_m[pickle_load_in['dN']['aps_idx']] # originally wet from measurements
+    # # then run 2. and 3. to speciate the radius data and make the dry and wet set of sizes.
+    #
+    # pickle_load_in['r_md_microns'] = r_md_microns
+    # pickle_load_in['r_d_microns'] = r_d_microns
+    # np.save(filename, pickle_load_in)
+    # print filename + ' has been resaved!'
+
 
     # ------------------------------------------------------
 
@@ -2229,12 +2295,8 @@ if __name__ == '__main__':
         # with open(filename, 'rb') as handle:
         #     dN_in = pickle.load(handle)
 
-        # filename = pickledir + 'N_hourly_NK_APS_SMPS_rnd.pickle'
-        # with open(filename, 'rb') as handle2:
-        #     test_rnd2 = pickle.load(handle2)
-
         # numpy load
-        d_in = np.load(pickledir + 'N_hourly_NK_APS_SMPS_'+year+'.npy')
+        d_in = np.load(pickledir + 'N_hourly_NK_APS_SMPS_'+year+'.npy') # old
         dN_in = d_in.flat[0]
 
 
@@ -2345,14 +2407,14 @@ if __name__ == '__main__':
     n_species = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
 
     # temporarily set OC absorption to 0
-    n_species['CBLK'] = complex(n_species['CBLK'].real, 0.44)
+    # n_species['CBLK'] = complex(n_species['CBLK'].real, 0.44)
     # n_species['CORG'] = complex(n_species['CORG'].real, 0.01)
 
     # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
     OC_meta = {'type': 'agedOCGF', 'extra': 'BCimag0.44'}
     gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir, OCtype=OC_meta['type'])
-    print 'OC meta = '
-    print OC_meta
+    #print 'OC meta = '
+    #print OC_meta
 
 
     ## Read in species by mass data
@@ -2519,8 +2581,6 @@ if __name__ == '__main__':
     r_md_m = {aer_i: np.hstack((r_md_smps_m[aer_i], r_md_aps_m_dup)) for aer_i in aer_particles}
 
 
-
-
     # -----------------------------------------------------------
 
     print 'calculating num_conc, GF and n_wet...'
@@ -2605,9 +2665,6 @@ if __name__ == '__main__':
 
 
 
-
-
-
     # --------------------------------------------------------------
 
     # calculate n_wet for each rbin (complex refractive index of dry aerosol and water based on physical growth)
@@ -2630,10 +2687,14 @@ if __name__ == '__main__':
     #   calculating the lidar ratio for 1 year can take 3-6 hours (depending on len(D))
     if picklesave == True:
 
+        # remove the UTC timestamp on the array so it can be easily imported on a windows system
+        met['time'] = np.array([i.replace(tzinfo=None) for i in met['time']])
+
         # pickle_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str_nm+'.pickle'
         # pickle_save = pickle_optics_save(pickle_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
         #             ceil_lambda=ceil_lambda)
-        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.npy'
+        # np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.npy'
+        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'.npy'
         np_save = numpy_optics_save(np_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda, r_md_m=r_md_m)
         print np_savename + ' is saved!'
@@ -2918,34 +2979,69 @@ if __name__ == '__main__':
 
      # ---------------------------------------
 
-    # # LINE PLOT OF EXTINCTION COEFFICIENT
+    # LINE PLOT OF EXTINCTION COEFFICIENT
     # num_conc = pickle_load_in['num_conc']
     # C_ext = pickle_load_in['optics']['C_ext']
     # C_back = pickle_load_in['optics']['C_back']
     # t_range = range(num_conc['CBLK'].shape[0])
     # D_range = range(num_conc['CBLK'].shape[1])
-    # # need r_md_m to plot on the x axis
+    ext_coeff = pickle_load_in['optics']['sigma_ext_all_bins']
+    back_coeff = pickle_load_in['optics']['sigma_back_all_bins']
+    # need r_md_m to plot on the x axis
+
+
+    ext_coeff_avg= {aer_i: np.nanmean(ext_coeff[aer_i], axis=0) for aer_i in aer_particles}
+    back_coeff_avg= {aer_i: np.nanmean(back_coeff[aer_i], axis=0) for aer_i in aer_particles}
+
+    r_md_microns_avg = {aer_i: np.nanmean(r_md_microns[aer_i], axis=0) for aer_i in aer_particles}
+    r_md_m_avg = {aer_i: np.nanmean(r_md_m[aer_i], axis=0) for aer_i in aer_particles}
+    len_r_md = r_md_microns_avg['CBLK'].shape[0]
+
+    # calculate d (/sigma_ext) / dlogD [m-1 /m-3]
+    d_ext_coeff_avg={}
+    dlogD={}
+    for aer_i, r_md_m_avg_i in r_md_m_avg.iteritems():
+        _, _, dlogD[aer_i] = calc_bin_parameters_general(r_md_m_avg_i[None, :])
+        dlogD[aer_i] = np.squeeze(dlogD[aer_i])
+        d_ext_coeff_avg[aer_i] = ext_coeff_avg[aer_i]/dlogD[aer_i]
+
+
+    fig, ax = plt.subplots(1, 1, figsize=(7, 4.5))
+
+    for aer_i, d_ext_coeff_avg_i in d_ext_coeff_avg.iteritems():
+
+        plt.semilogx(r_md_microns_avg[aer_i], d_ext_coeff_avg_i, color=aer_colours[aer_i], label=aer_i)
+
+    plt.xlabel('r_md [microns]')
+    #plt.xticks(index+width/2.0, [str(i) for i in np.arange(1, len_r_md+1)])
+    plt.ylabel('d sigma_ext/dlogD [m-1]')
+    #plt.ylim([0.0, 1.0])
+    plt.legend(loc='best', fontsize = 10, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
+
+    plt.tight_layout(h_pad=0.1)
+    plt.subplots_adjust(top=0.9, right=0.8)
+    plt.savefig(savedir + 'sigma_ext_'+year+'_'+savestr+'_'+ceil_lambda_str+'.png')
+
+    # # where to put the bottom of the bar chart, start at 0 and then move it up with each aer_i iteration
+    # bottom = np.zeros(len_r_md)
+    # index = np.arange(len_r_md)
+    # width = 1.0
     #
-    # sigma_ext_avg= {aer_i: np.empty(len(D_range)) for aer_i in aer_particles}
-    # sigma_back_avg= {aer_i: np.empty(len(D_range)) for aer_i in aer_particles}
+    # for aer_i, d_ext_coeff_avg_i in d_ext_coeff_avg.iteritems():
     #
-    # for aer_i in aer_particles:
-    #     sigma_ext_avg[aer_i][:] = np.nan
-    #     sigma_back_avg[aer_i][:] = np.nan
+    #     plt.bar(dlogD[aer_i], d_ext_coeff_avg_i, bottom=bottom, width=width, color=aer_colours[aer_i], label=aer_i)
     #
+    #     # move the bottom of the bar location up, for the next iteration
+    #     bottom += d_ext_coeff_avg_i
     #
-    # for aer_i in aer_particles:
-    #     sigma_ext_avg[aer_i] = np.nanmean(num_conc[aer_i], axis=0) * np.nanmean(C_ext[aer_i], axis=0)
-    #     sigma_back_avg[aer_i] = np.nanmean(num_conc[aer_i], axis=0) * np.nanmean(C_back[aer_i], axis=0)
+    # plt.xlabel('r_md [microns]')
+    # #plt.xticks(index+width/2.0, [str(i) for i in np.arange(1, len_r_md+1)])
+    # plt.ylabel('d sigma_ext/dlogD [m-1]')
+    # #plt.ylim([0.0, 1.0])
+    # plt.legend(loc='best', fontsize = 8, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
     #
-    # # calc average sigma for each average diameter bin
-    #
-    # # stack data and plot
-    # stack = np.zeros(len(D_range)) # start at 0
-    # plt.figure()
-    # ax = plt.gca()
-    # for aer_i in aer_particles:
-    #
-    #     plt.plot(stack)
+    # plt.tight_layout(h_pad=0.1)
+    # plt.subplots_adjust(top=0.9, right=0.8)
+
 
     print 'END PROGRAM'
