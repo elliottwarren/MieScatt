@@ -12,7 +12,6 @@ from pymiecoated import Mie
 import matplotlib.pyplot as plt
 import datetime as dt
 import ellUtils as eu
-import pickle
 
 from dateutil import tz
 
@@ -212,6 +211,46 @@ def part_file_read(particle):
 
     return data
 
+def oc_bc_interp_hourly(oc_bc_in):
+
+    """
+    Increase EC and OC data resolution from daily to hourly with a simple linear interpolation
+
+    :param oc_bc_in:
+    :return:oc_bc
+    """
+
+    # Increase to hourly resolution by linearly interpolate between the measurement times
+    date_range = eu.date_range(oc_bc_in['time'][0], oc_bc_in['time'][-1] + dt.timedelta(days=1), 60, 'minutes')
+    oc_bc = {'time': date_range,
+                    'CORG': np.empty(len(date_range)),
+                    'CBLK': np.empty(len(date_range))}
+
+    oc_bc['CORG'][:] = np.nan
+    oc_bc['CBLK'][:] = np.nan
+
+    # fill hourly data
+    for aer_i in ['CORG', 'CBLK']:
+
+        # for each day, spready data out into the hourly slots
+        # do not include the last time, as it cannot be used as a start time (fullday)
+        for t, fullday in enumerate(oc_bc_in['time'][:-1]):
+
+            # start = fullday
+            # end = fullday + dt.timedelta(days=1)
+
+            # linearly interpolate between the two main dates
+            interp = np.linspace(oc_bc_in[aer_i][t], oc_bc_in[aer_i][t+1],24)
+
+            # idx range as the datetimes are internally complete, therefore a number sequence can be used without np.where()
+            idx = np.arange(((t+1)*24)-24, (t+1)*24)
+
+            # put the values in
+            oc_bc[aer_i][idx] = interp
+
+
+    return oc_bc
+
 def time_match_pm_masses(pm_mass_in, oc_bc_in, timeRes, nanMissingRow=False):
 
     # pm_mass_in = pm10_mass_in
@@ -230,6 +269,9 @@ def time_match_pm_masses(pm_mass_in, oc_bc_in, timeRes, nanMissingRow=False):
     :param nanMissingRow: [bool] nan all variables in a row, if one of them is missing.
     :return: pm2p5_mass, pm10_mass, met, dN
     """
+
+    # time buffer - time allowed the t_range_idx to be 'out' but still acceptable - set at 1/4 the timeRes [minutes]
+    t_buffer = (0.25*timeRes)
 
     ## 1. set up dictionaries with times
     # as we want the daily time resolution, remove the hours and make a time range from that
@@ -264,41 +306,33 @@ def time_match_pm_masses(pm_mass_in, oc_bc_in, timeRes, nanMissingRow=False):
     # use a moving subsample assuming the data is in ascending order
     for var in [pm_mass_in, oc_bc_in]:
 
-        # set skip idx to 0 to begin with
-        #   it will increase after each t loop
-        skip_idx = 0
 
-        # set the intial end of skip range to be the end of the array, in order to find the first proper skip idx
-        end_skip_idx = len(var['time'])
-
-        for t in range(len(time_range)):
+        for t, time_t in enumerate(time_range):
 
 
-            # find data for this time
-            binary = np.logical_and(var['time'][skip_idx:skip_idx+end_skip_idx] >= time_range[t],
-                                    var['time'][skip_idx:skip_idx+end_skip_idx] < time_range[t] + dt.timedelta(minutes=timeRes))
+            # time previous to time_t
+            time_tm1 = time_t - dt.timedelta(minutes=timeRes)
 
-            # actual idx of the data within the entire array
-            skip_idx_set_i = np.where(binary == True)[0] + skip_idx
+            s_idx = int(eu.binary_search(var['time'], time_tm1))
+            # end of time period
+            e_idx = int(eu.binary_search(var['time'], time_t))
 
-            if t == 170:
-                store = skip_idx_set_i
+            # if the time_range time and data['time'] found in this iteration are within an acceptable range (15 mins)
+            tm1_diff = time_tm1 - var['time'][s_idx]
+            t_diff = time_t - var['time'][e_idx]
 
-            # set the end_skip_idx to a smaller size once the start skip idx has been found so a smaller idx range
-            #   is searched. Set it to timeRes, assuming the smallest the raw resolution data can be is 1 min.
-            end_skip_idx = timeRes
+            t_range_idx = range(s_idx, e_idx+1)
 
-            # create means of the data for this time period
-            for key in var.iterkeys():
-                if key not in ['time']:
+            # allow a time buffer of 1/4 the timeRes (e.g. timeREs = 60, then allow the tm1_diff and t_diff be 15 minutes out)
+            # t_buffer converted to seconds here for comparison
+            if (tm1_diff.total_seconds() <= t_buffer * 60) & (t_diff.total_seconds() <= t_buffer * 60):
 
-                    # take mean of the time period
-                    pm_mass[key][t] = np.nanmean(var[key][skip_idx_set_i])
+                # create means of the data for this time period
+                for key in var.iterkeys():
+                    if key not in ['time']:
 
-            # change the skip_idx for the next loop to start just after where last idx finished
-            if skip_idx_set_i.size != 0:
-                skip_idx = skip_idx_set_i[-1] + 1
-
+                        # take mean of the time period
+                        pm_mass[key][t] = np.nanmean(var[key][t_range_idx])
 
     ## 4. nan across variables for missing data
     # make data for any instance of time, t, to be nan if any data is missing from dN, met or pm mass data
@@ -763,7 +797,7 @@ def linear_interpolate_n(particle, aim_lambda):
 
     return n, dict_parts
 
-def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageType='monthly'):
+def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_d, averageType='monthly'):
 
     """
     Calculate the dry extinction efficiency for each aerosol (Q_dry_aer) and for MURK (Q_dry_murk)
@@ -771,7 +805,7 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageTyp
     :param pm_rel_vol:
     :param ceil_lambda:
     :param aer_particles_long:
-    :param r_md: dry particle radius [meters]
+    :param r_d: dry particle radius [meters]
     :param averageType: ['monthly' or 'yearly'] Type of average data being used to calculate Q_ext_dry
     :return: Q_dry_aer: dry extinction efficiencyfor each aerosol separately
     :return: Q_dry_murk: dry extinction efficiency for aerosols combined into the new MURK
@@ -823,7 +857,7 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageTyp
             else:
                 raise ValueError("type = coated, but y or m2 is empty []")
 
-        # Calc extinction efficiency for dry aerosol (using r_md!!!! NOT r_m)
+        # Calc extinction efficiency for dry aerosol (using r_d!!!! NOT r_m)
         # if singular, then type == complex, else type == array
         elif type == 'dry':
 
@@ -847,22 +881,22 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageTyp
     n_murk = np.nansum([pm_rel_vol[aer_i] * n_aerosol[aer_i] for aer_i in pm_rel_vol.keys()], axis=0)
 
     # calculate size parameter for dry and wet
-    x_dry = (2.0 * np.pi * r_md)/ceil_lambda
+    x_dry = (2.0 * np.pi * r_d)/ceil_lambda
 
-
-    # # Calc extinction efficiency for each dry aerosol
-    # # Commented out to save computational resources
-    # Q_dry_aer = {}
-    # for key, n_i in n_aerosol.iteritems():
-    #     all_particles_dry = [Mie(x=x_i, m=n_i) for x_i in x_dry]
-    #     Q_dry_aer[key] = np.array([particle.qext() for particle in all_particles_dry])
+    # Calc extinction efficiency for each dry aerosol
+    # Commented out to save computational resources
+    Q_dry_aer = {}
+    for key, n_i in n_aerosol.iteritems():
+        all_particles_dry = [Mie(x=x_i, m=n_i) for x_i in x_dry]
+        Q_dry_aer[key] = np.array([particle.qext() for particle in all_particles_dry])
 
     # Calc extinction efficiency for the monthly MURK values
-
-    if averageType == 'monthly':
-        Q_dry_murk = np.empty((len(r_md), 12))
+    if averageType == 'hourly':
+        Q_dry_murk = np.empty((len(r_d), 1))
+    elif averageType == 'monthly':
+        Q_dry_murk = np.empty((len(r_d), 12))
     elif averageType == 'total':
-        Q_dry_murk = np.empty((len(r_md), 1))
+        Q_dry_murk = np.empty((len(r_d), 1))
     else:
         raise ValueError('averageType needs to be either "monthly" or "total"!')
 
@@ -873,7 +907,55 @@ def calc_Q_ext_dry(pm_rel_vol, ceil_lambda, aer_particles_long, r_md, averageTyp
 
     return Q_dry_murk
 
-def gaussian_weighted_Q_dry_murk_lambda(Q_dry_murk, ceil_lambda_range, ceil_lambda):
+def calc_Q_ext_dry_aer(aer_i, ceil_lambda, aer_particles_long, r_d, averageType='monthly'):
+
+    """
+    Calculate the dry extinction efficiency for each aerosol (Q_dry_aer) and for MURK (Q_dry_murk)
+
+    :param pm_rel_vol:
+    :param ceil_lambda:
+    :param aer_particles_long:
+    :param r_d: dry particle radius [meters]
+    :param averageType: ['monthly' or 'yearly'] Type of average data being used to calculate Q_ext_dry
+    :return: Q_dry_aer: dry extinction efficiencyfor each aerosol separately
+    :return: Q_dry_murk: dry extinction efficiency for aerosols combined into the new MURK
+    """
+
+    def calc_n_aerosol(aer_particles_long, ceil_lambda):
+
+        """
+        Calculate n for each of the aerosol
+        :param aer_particles_long: dictionary with the key as short name, and value as long name
+        :return:
+        """
+
+        n_aerosol = {}
+
+        if type(aer_particles_long) == dict:
+            for aer_i, long_name in aer_particles_long.iteritems():
+                n_aerosol[aer_i], _ = linear_interpolate_n(long_name, ceil_lambda)
+
+
+        # print 'Read and linearly interpolated aerosols!'
+
+        return n_aerosol
+
+    # get the complex index of refraction (n) for the aerosol, for the wavelength
+    # output n is complex index of refraction (n + ik)
+    n_aerosol = calc_n_aerosol(aer_particles_long, ceil_lambda)
+    n_aerosol = n_aerosol[aer_i]
+
+    # calculate size parameter for dry
+    x_dry = (2.0 * np.pi * r_d)/ceil_lambda
+
+    # Calc extinction efficiency for each dry aerosol
+    # Commented out to save computational resources
+    all_particles_dry = [Mie(x=x_i, m=n_aerosol) for x_i in x_dry]
+    Q_dry_aer = np.array([particle.qext() for particle in all_particles_dry])
+
+    return Q_dry_aer
+
+def gaussian_weighted_Q_dry_aer_lambda(Q_dry, ceil_lambda_range, ceil_lambda, aer_type='murk'):
 
     """
     Calculate the gaussian weighted value for Q_dry_murk, with respect to wavelength.
@@ -901,46 +983,49 @@ def gaussian_weighted_Q_dry_murk_lambda(Q_dry_murk, ceil_lambda_range, ceil_lamb
 
     # 1) apply the weights for each wavelength to Q_dry_murk to find the contribution from each wavelength separately
     # 2) sum up the weighted Q_dry_murk, across all the wavelengths, to get the final guassian weighted Q_dry_murk
-    Q_dry_murk_weighted = np.sum(convex_weights[:, None, None] * Q_dry_murk, axis=0)
+    if aer_type=='murk':
+        Q_dry_weighted = np.sum(convex_weights[:, None, None] * Q_dry, axis=0)
+    else:
+        Q_dry_weighted = np.sum(convex_weights[:, None] * Q_dry, axis=0)
 
-    return Q_dry_murk_weighted
+    return Q_dry_weighted
 
-def guassian_weighted_Q_dry_murk_radii(Q_dry_murk_lambda_weighted, r_md, geo_std_dev):
+def guassian_weighted_Q_dry_aer_radii(Q_dry_lambda_weighted, r_d, geo_std_dev, aer_type='murk'):
 
     """
     Weight Q_dry_murk by radii after having been weighted by lambda.
 
     :param Q_dry_murk_lambda_weighted: Q_dry_murk already weighted by lambda
-    :param r_md:
+    :param r_d:
     :param geo_std_dev:
     :return:Q_dry_murk_lambda_radii_weighted: Q_dry_murk weighted by radii
     """
 
     # calculate log of the radius
-    log10_r_md = np.log10(r_md)
+    log10_r_d = np.log10(r_d)
 
     # store water vapour mass absorption for the different wavelengths [np.array]
     # store gaussian weights for plot [list]
     convex_weights = []
-    Q_dry_murk_lambda_radii_weighted = np.empty(Q_dry_murk_lambda_weighted.shape)
-    Q_dry_murk_lambda_radii_weighted[:] = np.nan
+    Q_dry_lambda_radii_weighted = np.empty(Q_dry_lambda_weighted.shape)
+    Q_dry_lambda_radii_weighted[:] = np.nan
 
     # convert geometric standard deviation (1.6: Harrison et al 2012 taken from a log10 transformed distribution,
     #   used in Warren et al. paper 1) to the standard deviation
-    stdev_r_md = np.log10(geo_std_dev)
+    stdev_r_d = np.log10(geo_std_dev)
 
-    for log10_r_md_idx, log10_r_md_i in enumerate(log10_r_md):
+    for log10_r_d_idx, log10_r_d_i in enumerate(log10_r_d):
 
-        # # make a small range of log_r_md for the weights to be calulate from, for this instance of log10_r_md_i
+        # # make a small range of log_r_d for the weights to be calulate from, for this instance of log10_r_d_i
         # #   make sure the range is wide enough for the tails of the gaussian are not missed!
         # extend = np.log10(2.0e-06)
-        # min_r = log10_r_md_i - extend
-        # max_r = log10_r_md_i + extend
+        # min_r = log10_r_d_i - extend
+        # max_r = log10_r_d_i + extend
         # step = (max_r - min_r)/100.0
-        # log10_r_md_range = np.arange(min_r, max_r, step)
+        # log10_r_d_range = np.arange(min_r, max_r, step)
 
-        # calculate P(radii) for the main (mean) radii (log10_r_md_i) across a radii range
-        weights = np.array([eu.normpdf(i, log10_r_md_i, stdev_r_md) for i in log10_r_md])
+        # calculate P(radii) for the main (mean) radii (log10_r_d_i) across a radii range
+        weights = np.array([eu.normpdf(i, log10_r_d_i, stdev_r_d) for i in log10_r_d])
 
         # modify weights so they add up to 1
         # convex combination - https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Convex_combination_example
@@ -949,9 +1034,12 @@ def guassian_weighted_Q_dry_murk_radii(Q_dry_murk_lambda_weighted, r_md, geo_std
 
         # 1) apply the weights across the different radii of Q_dry_murk_lambda_weighted to find Q_ext_dry for this radii
         # 2) sum up the weighted Q_dry_murk, across all the wavelengths, to get the final guassian weighted Q_dry_murk
-        Q_dry_murk_lambda_radii_weighted[log10_r_md_idx, :] = np.sum(convex_weights_i[None, :, None] * Q_dry_murk_lambda_weighted, axis=1)
+        if aer_type =='murk':
+            Q_dry_lambda_radii_weighted[log10_r_d_idx, :] = np.sum(convex_weights_i[None, :, None] * Q_dry_lambda_weighted, axis=1)
+        else:
+            Q_dry_lambda_radii_weighted[log10_r_d_idx] = np.sum(convex_weights_i[None, :] * Q_dry_lambda_weighted, axis=1)
 
-    return Q_dry_murk_lambda_radii_weighted
+    return Q_dry_lambda_radii_weighted
 
 # plotting
 
@@ -1268,7 +1356,7 @@ def stacked_total_bar_rel_aerosol_vol(pm_rel_vol, pm_mass_merged, savedir, site_
 
 ## other
 
-def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_md_micron, extra=''):
+def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_d_micron, extra=''):
 
     """
     Plot the monthly Q_ext,dry values for MURK
@@ -1289,7 +1377,7 @@ def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_md_
     for month_i, month in zip(range(12), range(1, 13)):
 
         # plot it
-        plt.semilogx(r_md_micron, Q_dry_murk[:, month_i], label=str(month), color=colour_range[month_i])
+        plt.semilogx(r_d_micron, Q_dry_murk[:, month_i], label=str(month), color=colour_range[month_i])
 
 
     # prettify
@@ -1315,7 +1403,7 @@ def lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_md_
 
     return fig
 
-def lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_md_micron, extra=''):
+def lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_d_micron, extra=''):
 
     # make a range of colours for the different months
     colour_range = eu.create_colours(12)[:-1]
@@ -1332,7 +1420,7 @@ def lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir,
     for month_i, month in zip(range(12), range(1, 13)):
 
         # plot it
-        plt.semilogx(r_md_micron, ratio[:, month_i], label=str(month), color=colour_range[month_i])
+        plt.semilogx(r_d_micron, ratio[:, month_i], label=str(month), color=colour_range[month_i])
 
 
     # prettify
@@ -1427,7 +1515,7 @@ if __name__ == '__main__':
     timeRes = 60 * 24 # daily
 
     # averaging up to
-    average_up = 'monthly'
+    average_up = 'monthly' # 'hourly'
 
     # save the Q(dry) curve for MURK?
     savedata = True
@@ -1463,6 +1551,10 @@ if __name__ == '__main__':
     # Read in the daily EC and OC data [grams m-3]
     pm10_oc_bc_in = read_EC_BC_mass_long_term_data(datadir, filename_oc_ec) # 27/01/16 - CBLK is present
 
+    # linearly interpolate OC and BC from daily to hourly resolution if average_up == 'hourly'
+    if average_up == 'hourly':
+        pm10_oc_bc_in = oc_bc_interp_hourly(pm10_oc_bc_in)
+
     # merge pm10 mass data together and average up to a common time resolution defined by timeRes [grams m-3]
     #   which will be the new 'raw data' time
     pm10_mass_merged = time_match_pm_masses(pm10_mass_in, pm10_oc_bc_in, timeRes, nanMissingRow=True)
@@ -1485,6 +1577,12 @@ if __name__ == '__main__':
 
             pm10_mass_avg = pm10_mass
 
+    if average_up == 'hourly':
+
+        # if data is already in hourly, then no need for extra processing
+        if timeRes == 60: # if already in hourly resolution
+
+            pm10_mass_avg = pm10_mass
 
     elif average_up == 'monthly':
         # monthly average the mass
@@ -1529,20 +1627,25 @@ if __name__ == '__main__':
     # create dry size distribution [microns], [m]
     # 1. simple linear range
     # step_micron = 0.005
-    # r_md_micron = np.arange(0.000 + step_micron, 5.000 + step_micron, step_micron)
-    # r_md = r_md_micron * 1.0e-06
+    # r_d_micron = np.arange(0.000 + step_micron, 5.000 + step_micron, step_micron)
+    # r_d = r_d_micron * 1.0e-06
 
     # 2. varying range
-    # step r_md by 1*10^i where i varies across the different size magnitudes e.g. -6 for microns, -9 for nm
-    step = 0.1
+    # step r_d by 1*10^i where i varies across the different size magnitudes e.g. -6 for microns, -9 for nm
+    step = 0.025
     num_range = np.arange(1.0, 10.0, step)
-    r_md = np.hstack([num_range*(10**i) for i in range(-11, -5)])
-    r_md_micron = r_md * 1e6
+    r_d = np.hstack([num_range*(10**i) for i in range(-11, -5)])
+    r_d_micron = r_d * 1e6
 
 
     # create an array to store the _Q_dry_murk values
-    Q_dry_murk = np.empty((len(ceil_lambda_range), len(r_md), 12))
+    Q_dry_murk = np.empty((len(ceil_lambda_range), len(r_d), 12))
     Q_dry_murk[:] = np.nan
+
+    Q_dry_aer = {}
+    for aer_i in aer_particles:
+        Q_dry_aer[aer_i] = np.empty((len(ceil_lambda_range), len(r_d)))
+        Q_dry_aer[aer_i][:] = np.nan
 
     for lambda_idx, lambda_i in enumerate(ceil_lambda_range):
 
@@ -1550,16 +1653,37 @@ if __name__ == '__main__':
         print 'Q_dry_murk: '+ str(lambda_idx+1) +' of ' + str(len(ceil_lambda_range))
 
         # calculate Q_dry for each aerosol, and for murk given the relative volume of each aerosol species
-        Q_dry_murk[lambda_idx, :, :] = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_md,
+        Q_dry_murk[lambda_idx, :, :] = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_d,
                                                          averageType=average_up)
 
+        # # Q_ext,dry for each aerosol - no time component, just as a function of radius
+        # for aer_i in aer_particles:
+        #     Q_dry_aer[aer_i][lambda_idx, :]  = calc_Q_ext_dry_aer(aer_i, lambda_i, aer_particles_long, r_d,
+        #                                                  averageType='hourly')
+
+    # -----------------------------------------------
+    # Weighting
+    # -----------------------------------------------
+
     # create guassian weighted Q_dry_murk across the wavelengths to make one for the main ceilometer wavelength
-    Q_dry_murk_lambda_weighted = gaussian_weighted_Q_dry_murk_lambda(Q_dry_murk, ceil_lambda_range, ceil_lambda)
+    Q_dry_murk_lambda_weighted = gaussian_weighted_Q_dry_aer_lambda(Q_dry_murk, ceil_lambda_range, ceil_lambda,
+                                                                    aer_type='murk')
 
     # create a guassian weighted Q_dry_murk across a range of radii for each value in the radii range.
     #   need to do this as Q_dry_murk is extremely sensitive to radii, and small changes in radii = large changes in
     #   optical properties!
-    Q_dry_murk_lambda_radii_weighted = guassian_weighted_Q_dry_murk_radii(Q_dry_murk_lambda_weighted, r_md, geo_std_dev)
+    Q_dry_murk_lambda_radii_weighted = guassian_weighted_Q_dry_aer_radii(Q_dry_murk_lambda_weighted, r_d, geo_std_dev,
+                                                                          aer_type='murk')
+
+    # # do the same for the individal aerosol species
+    # Q_dry_aer_lambda_weighted = {}
+    # Q_dry_aer_lambda_radii_weighted = {}
+    # for aer_i in aer_particles:
+    #     Q_dry_aer_lambda_weighted[aer_i] = gaussian_weighted_Q_dry_aer_lambda(Q_dry_aer[aer_i], ceil_lambda_range, ceil_lambda,
+    #                                                                 aer_type=aer_i)
+    #
+    #     Q_dry_aer_lambda_radii_weighted[aer_i] = guassian_weighted_Q_dry_aer_radii(Q_dry_aer_lambda_weighted[aer_i], r_d,
+    #                                                                         geo_std_dev, aer_type=aer_i)
 
     # -----------------------------------------------
     # Saving
@@ -1575,34 +1699,54 @@ if __name__ == '__main__':
                            + pm10_mass_merged['time'][0].strftime('%Y/%m/%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y/%m/%d') + \
                            ' ' + weight_str + ' ' + \
                            '\n# radius [m],'+','.join([str(i) for i in range(1, 13)]) # need to be comma delimited
-                save_array = np.hstack((r_md[:, None], Q_dry_murk_lambda_radii_weighted))
+                save_array = np.hstack((r_d[:, None], Q_dry_murk_lambda_radii_weighted))
 
                 # save Q curve and radius [m]
-                np.savetxt(csvsavedir + site_ins['land-type'] +'_monthly_Q_ext_dry_'+ceil_lambda_str_nm+'.csv',
-                           save_array, delimiter=',', header=headers)
+                save_name = csvsavedir + site_ins['land-type'] +'_monthly_Q_ext_dry_'+ceil_lambda_str_nm+'.csv'
+                np.savetxt(save_name, save_array, delimiter=',', header=headers)
+                print save_name + ' is saved!'
             elif average_up == 'total':
 
                 headers = '# Data created from '+site_ins['site_long']+' between ' \
                            + pm10_mass_merged['time'][0].strftime('%Y/%m/%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y/%m/%d') + \
                            ' ' + weight_str + ' ' + \
                           '\n# radius [m], Q_ext_dry'
-                save_array = np.hstack((r_md, Q_dry_murk_lambda_radii_weighted))
+                save_array = np.hstack((r_d, Q_dry_murk_lambda_radii_weighted))
 
                 # save Q curve and radius [m]
-                np.savetxt(csvsavedir + site_ins['land-type'] +'_total_Q_ext_dry_'+ceil_lambda_str_nm+'.csv',
-                           save_array, delimiter=',', header=headers)
+                save_name = csvsavedir + site_ins['land-type'] +'_total_Q_ext_dry_'+ceil_lambda_str_nm+'.csv'
+                np.savetxt(save_name, save_array, delimiter=',', header=headers)
+                print save_name + ' is saved!'
 
     else:
         raise ValueError('savedata == True but average_up is not "monthly" or "total"!')
 
-    # save the relative volume of aerosol for making f(RH) curves in pickle form!
-    #   "I'm a pickle!"
-    # set up save_time as the original has a timezone and for some reason it messes up the pickle load later on
-    save_time = np.array([dt.datetime(i.year, i.month, i.day) for i in pm10_mass_avg['time']])
-    pickle_save = {'pm10_rel_vol': pm10_rel_vol, 'time': save_time}
-    with open(pickledir +site_ins['site_short']+'_'+average_up+'_aerosol_relative_volume.pickle', 'wb') as handle:
-        pickle.dump(pickle_save, handle)
+    # # save the relative volume of aerosol for making f(RH) curves in pickle form!
+    # #   "I'm a pickle!"
+    # # set up save_time as the original has a timezone and for some reason it messes up the pickle load later on
+    # save_time = np.array([dt.datetime(i.year, i.month, i.day) for i in pm10_mass_avg['time']])
+    # # pickle_save = {'pm10_rel_vol': pm10_rel_vol, 'time': save_time}
+    # # with open(pickledir +site_ins['site_short']+'_'+average_up+'_aerosol_relative_volume.pickle', 'wb') as handle:
+    # #     pickle.dump(pickle_save, handle)
+    # npy_save = {'pm10_rel_vol': pm10_rel_vol, 'time': save_time}
+    # np.save(pickledir +site_ins['site_short']+'_'+average_up+'_aerosol_relative_volume.npy', npy_save)
 
+    #save the aerosol Q_ext,dry values for use in aerFO run experiment
+    # save_time = np.array([dt.datetime(i.year, i.month, i.day) for i in pm10_mass_avg['time']])
+    save_time = np.array([i.replace(tzinfo=None) for i in pm10_mass_avg['time']])
+    npy_save = {'Q_dry_aer': Q_dry_aer_lambda_radii_weighted,
+                'r_d': r_d,
+                'time': save_time}
+    save_name = pickledir +site_ins['site_short']+'_all_aerosol_Q_ext_dry_'+ceil_lambda_str_nm+'.npy'
+    npy_save = np.save(save_name, npy_save)
+    print save_name + ' was saved!'
+
+    # save the hourly relative volume
+    hourly_rel_vol_save = pm10_rel_vol
+    hourly_rel_vol_save.update({'time': np.array([i.replace(tzinfo=None) for i in pm10_mass_avg['time']])})
+    rel_vol_name = pickledir + 'NK_hourly_aerosol_relative_volume.npy'
+    np.save(rel_vol_name, hourly_rel_vol_save)
+    print rel_vol_name + ' was saved!'
 
     # -----------------------------------------------
     # Plotting
@@ -1623,10 +1767,10 @@ if __name__ == '__main__':
         # stacked_monthly_bar_rel_species(pm10_rel_avg_mass, pm10_mass_merged, 'Relative mass concentration', barchartsavedir, site_ins, ERG_colours)
 
         # line plot of Q_ext,dry
-        lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_md_micron, extra='')
+        lineplot_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, savedir, r_d_micron, extra='')
 
         # line plot of Q_ext,dry as a ratio of the average
-        lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, r_md_micron, savedir, extra='tester')
+        lineplot_ratio_monthly_MURK(Q_dry_murk, pm10_mass_merged, site_ins, r_d_micron, savedir, extra='tester')
 
         # # TIMESERIES - S - stats (the one with many months)
         # # plot daily statistics of S
@@ -1651,19 +1795,19 @@ if __name__ == '__main__':
         # if weight_Q_ext_dry == True:
         #
         #     # MURK line plot with the weighted wavelength
-        #     lineplot_monthly_MURK(Q_dry_murk_lambda_weighted, pm10_mass_merged, site_ins, savedir, r_md_micron, extra='wavelength_radii_weighted')
+        #     lineplot_monthly_MURK(Q_dry_murk_lambda_weighted, pm10_mass_merged, site_ins, savedir, r_d_micron, extra='wavelength_radii_weighted')
         #
         #     # line plot of Q_ext,dry as a ratio of the average
-        #     lineplot_ratio_monthly_MURK(Q_dry_murk_lambda_radii_weighted, pm10_mass_merged, site_ins, savedir, r_md_micron, extra='wavelength_radii_weighted')
+        #     lineplot_ratio_monthly_MURK(Q_dry_murk_lambda_radii_weighted, pm10_mass_merged, site_ins, savedir, r_d_micron, extra='wavelength_radii_weighted')
         #
         #     # plot the guassians
         #     fig=plt.figure(1,figsize=(6,4))
         #     ax=plt.subplot(1,1,1)
         #
-        #     for gaus_i, r_md_micron_i in zip(convex_weights, r_md_micron):
+        #     for gaus_i, r_d_micron_i in zip(convex_weights, r_d_micron):
         #
-        #         plt.semilogx(r_md_micron*2.0, gaus_i, label=str(r_md_micron_i))
-        #         #ax.plot(log10_r_md, gaus_i, label=str(r_md_micron_i))
+        #         plt.semilogx(r_d_micron*2.0, gaus_i, label=str(r_d_micron_i))
+        #         #ax.plot(log10_r_d, gaus_i, label=str(r_d_micron_i))
         #
         #     ax.set_ylabel('weighting')
         #     ax.set_xlabel('D [micron]')
