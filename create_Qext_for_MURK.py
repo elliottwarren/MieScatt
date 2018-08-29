@@ -1523,10 +1523,11 @@ if __name__ == '__main__':
     geo_std_dev = 1.6
 
     # common time resolution for data, before processing [minutes]
-    timeRes = 60 * 24 # daily
+    # timeRes = 60 * 24 # daily
+    timeRes = 60 # hourly
 
     # averaging up to
-    average_up = 'monthly' # 'hourly'
+    average_up = 'hourly' # 'hourly'
 
     # save the Q(dry) curve for MURK?
     savedata = True
@@ -1662,38 +1663,38 @@ if __name__ == '__main__':
         # current progress
         print 'Q_dry_murk: '+ str(lambda_idx+1) +' of ' + str(len(ceil_lambda_range))
 
-        # calculate Q_dry for each aerosol, and for murk given the relative volume of each aerosol species
-        Q_dry_murk[lambda_idx, :, :] = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_d,
-                                                         averageType=average_up)
+        # # calculate Q_dry for each aerosol, and for murk given the relative volume of each aerosol species
+        # Q_dry_murk[lambda_idx, :, :] = calc_Q_ext_dry(pm10_rel_vol, lambda_i, aer_particles_long, r_d,
+        #                                                  averageType=average_up)
 
-        # # Q_ext,dry for each aerosol - no time component, just as a function of radius
-        # for aer_i in aer_particles:
-        #     Q_dry_aer[aer_i][lambda_idx, :]  = calc_Q_ext_dry_aer(aer_i, lambda_i, aer_particles_long, r_d,
-        #                                                  averageType='hourly')
+        # Q_ext,dry for each aerosol - no time component, just as a function of radius
+        for aer_i in aer_particles:
+            Q_dry_aer[aer_i][lambda_idx, :]  = calc_Q_ext_dry_aer(aer_i, lambda_i, aer_particles_long, r_d,
+                                                         averageType='hourly')
 
     # -----------------------------------------------
     # Weighting
     # -----------------------------------------------
 
-    # create guassian weighted Q_dry_murk across the wavelengths to make one for the main ceilometer wavelength
-    Q_dry_murk_lambda_weighted = gaussian_weighted_Q_dry_aer_lambda(Q_dry_murk, ceil_lambda_range, ceil_lambda,
-                                                                    aer_type='murk')
-
-    # create a guassian weighted Q_dry_murk across a range of radii for each value in the radii range.
-    #   need to do this as Q_dry_murk is extremely sensitive to radii, and small changes in radii = large changes in
-    #   optical properties!
-    Q_dry_murk_lambda_radii_weighted, r_v = guassian_weighted_Q_dry_aer_radii(Q_dry_murk_lambda_weighted, r_d, geo_std_dev,
-                                                                          aer_type='murk')
-
-    # # do the same for the individal aerosol species
-    # Q_dry_aer_lambda_weighted = {}
-    # Q_dry_aer_lambda_radii_weighted = {}
-    # for aer_i in aer_particles:
-    #     Q_dry_aer_lambda_weighted[aer_i] = gaussian_weighted_Q_dry_aer_lambda(Q_dry_aer[aer_i], ceil_lambda_range, ceil_lambda,
-    #                                                                 aer_type=aer_i)
+    # # create guassian weighted Q_dry_murk across the wavelengths to make one for the main ceilometer wavelength
+    # Q_dry_murk_lambda_weighted = gaussian_weighted_Q_dry_aer_lambda(Q_dry_murk, ceil_lambda_range, ceil_lambda,
+    #                                                                 aer_type='murk')
     #
-    #     Q_dry_aer_lambda_radii_weighted[aer_i] = guassian_weighted_Q_dry_aer_radii(Q_dry_aer_lambda_weighted[aer_i], r_d,
-    #                                                                         geo_std_dev, aer_type=aer_i)
+    # # create a guassian weighted Q_dry_murk across a range of radii for each value in the radii range.
+    # #   need to do this as Q_dry_murk is extremely sensitive to radii, and small changes in radii = large changes in
+    # #   optical properties!
+    # Q_dry_murk_lambda_radii_weighted, r_v = guassian_weighted_Q_dry_aer_radii(Q_dry_murk_lambda_weighted, r_d, geo_std_dev,
+    #                                                                       aer_type='murk')
+
+    # do the same for the individal aerosol species
+    Q_dry_aer_lambda_weighted = {}
+    Q_dry_aer_lambda_radii_weighted = {}
+    for aer_i in aer_particles:
+        Q_dry_aer_lambda_weighted[aer_i] = gaussian_weighted_Q_dry_aer_lambda(Q_dry_aer[aer_i], ceil_lambda_range, ceil_lambda,
+                                                                    aer_type=aer_i)
+
+        Q_dry_aer_lambda_radii_weighted[aer_i], r_v = guassian_weighted_Q_dry_aer_radii(Q_dry_aer_lambda_weighted[aer_i], r_d,
+                                                                            geo_std_dev, aer_type=aer_i)
 
     # -----------------------------------------------
     # Saving
@@ -1746,7 +1747,7 @@ if __name__ == '__main__':
     # save_time = np.array([dt.datetime(i.year, i.month, i.day) for i in pm10_mass_avg['time']])
     save_time = np.array([i.replace(tzinfo=None) for i in pm10_mass_avg['time']])
     npy_save = {'Q_dry_aer': Q_dry_aer_lambda_radii_weighted,
-                'r_d': r_d,
+                'r_v': r_v,
                 'time': save_time}
     save_name = pickledir +site_ins['site_short']+'_all_aerosol_Q_ext_dry_'+ceil_lambda_str_nm+'.npy'
     npy_save = np.save(save_name, npy_save)
