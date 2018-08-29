@@ -1004,6 +1004,11 @@ def guassian_weighted_Q_dry_aer_radii(Q_dry_lambda_weighted, r_d, geo_std_dev, a
     # calculate log of the radius
     log10_r_d = np.log10(r_d)
 
+
+    # create an empty array to fill with the calculated volume mean radius (rv)
+    rv = np.empty(r_d.shape)
+    rv[:] = np.nan
+
     # store water vapour mass absorption for the different wavelengths [np.array]
     # store gaussian weights for plot [list]
     convex_weights = []
@@ -1032,6 +1037,12 @@ def guassian_weighted_Q_dry_aer_radii(Q_dry_lambda_weighted, r_d, geo_std_dev, a
         convex_weights_i = weights/np.sum(weights)
         convex_weights += [convex_weights_i]
 
+        # work out what the volume mean radius would be for this given radii distribution
+        x1 = weights * (r_d ** 4.0)
+        y1 = weights * (r_d ** 3.0)
+        rv[log10_r_d_idx] = np.sum(x1)/np.sum(y1)
+
+
         # 1) apply the weights across the different radii of Q_dry_murk_lambda_weighted to find Q_ext_dry for this radii
         # 2) sum up the weighted Q_dry_murk, across all the wavelengths, to get the final guassian weighted Q_dry_murk
         if aer_type =='murk':
@@ -1039,7 +1050,7 @@ def guassian_weighted_Q_dry_aer_radii(Q_dry_lambda_weighted, r_d, geo_std_dev, a
         else:
             Q_dry_lambda_radii_weighted[log10_r_d_idx] = np.sum(convex_weights_i[None, :] * Q_dry_lambda_weighted, axis=1)
 
-    return Q_dry_lambda_radii_weighted
+    return Q_dry_lambda_radii_weighted, rv
 
 # plotting
 
@@ -1637,7 +1648,6 @@ if __name__ == '__main__':
     r_d = np.hstack([num_range*(10**i) for i in range(-11, -5)])
     r_d_micron = r_d * 1e6
 
-
     # create an array to store the _Q_dry_murk values
     Q_dry_murk = np.empty((len(ceil_lambda_range), len(r_d), 12))
     Q_dry_murk[:] = np.nan
@@ -1672,7 +1682,7 @@ if __name__ == '__main__':
     # create a guassian weighted Q_dry_murk across a range of radii for each value in the radii range.
     #   need to do this as Q_dry_murk is extremely sensitive to radii, and small changes in radii = large changes in
     #   optical properties!
-    Q_dry_murk_lambda_radii_weighted = guassian_weighted_Q_dry_aer_radii(Q_dry_murk_lambda_weighted, r_d, geo_std_dev,
+    Q_dry_murk_lambda_radii_weighted, r_v = guassian_weighted_Q_dry_aer_radii(Q_dry_murk_lambda_weighted, r_d, geo_std_dev,
                                                                           aer_type='murk')
 
     # # do the same for the individal aerosol species
@@ -1691,6 +1701,7 @@ if __name__ == '__main__':
 
     # if running for single 905 nm wavelength, save the calculated Q
     if savedata == True:
+        print 'Saving Q_ext,dry against the volume mean radius!'
         if weight_Q_ext_dry == True:
             if average_up == 'monthly':
 
@@ -1699,7 +1710,7 @@ if __name__ == '__main__':
                            + pm10_mass_merged['time'][0].strftime('%Y/%m/%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y/%m/%d') + \
                            ' ' + weight_str + ' ' + \
                            '\n# radius [m],'+','.join([str(i) for i in range(1, 13)]) # need to be comma delimited
-                save_array = np.hstack((r_d[:, None], Q_dry_murk_lambda_radii_weighted))
+                save_array = np.hstack((r_v[:, None], Q_dry_murk_lambda_radii_weighted))
 
                 # save Q curve and radius [m]
                 save_name = csvsavedir + site_ins['land-type'] +'_monthly_Q_ext_dry_'+ceil_lambda_str_nm+'.csv'
@@ -1711,7 +1722,7 @@ if __name__ == '__main__':
                            + pm10_mass_merged['time'][0].strftime('%Y/%m/%d') + '-' + pm10_mass_merged['time'][-1].strftime('%Y/%m/%d') + \
                            ' ' + weight_str + ' ' + \
                           '\n# radius [m], Q_ext_dry'
-                save_array = np.hstack((r_d, Q_dry_murk_lambda_radii_weighted))
+                save_array = np.hstack((r_v, Q_dry_murk_lambda_radii_weighted))
 
                 # save Q curve and radius [m]
                 save_name = csvsavedir + site_ins['land-type'] +'_total_Q_ext_dry_'+ceil_lambda_str_nm+'.csv'
