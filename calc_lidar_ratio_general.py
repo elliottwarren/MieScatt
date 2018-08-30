@@ -2160,7 +2160,7 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2014'
+    year = '2015'
     year_str = str(year)
 
     # ============================================
@@ -2179,18 +2179,18 @@ if __name__ == '__main__':
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
 
-    filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905nm.npy'
-    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_freshOCGF.npy'
-    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
-    pickle_load_in = np.load(filename).flat[0]
-
-    optics = pickle_load_in['optics']
-    S = optics['S']
-    met = pickle_load_in['met']
-    dN = pickle_load_in['dN']
-    N_weight_pm10 = pickle_load_in['N_weight']
-    pm10_mass = pickle_load_in['pm10_mass']
-    time = pickle_load_in['met']['time']
+    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905nm.npy'
+    # # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_freshOCGF.npy'
+    # # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
+    # pickle_load_in = np.load(filename).flat[0]
+    #
+    # optics = pickle_load_in['optics']
+    # S = optics['S']
+    # met = pickle_load_in['met']
+    # dN = pickle_load_in['dN']
+    # N_weight_pm10 = pickle_load_in['N_weight']
+    # pm10_mass = pickle_load_in['pm10_mass']
+    # time = pickle_load_in['met']['time']
 
     #
     # key = 'CORG'
@@ -2308,10 +2308,15 @@ if __name__ == '__main__':
         for key in ['Dn_lt2p5', 'Dv_lt2p5', 'Dv_2p5_10', 'Dn_2p5_10']:
             if key in dN_in.keys():
                 del dN_in[key]
+        dN_in['D'] = dN_in['D'][4000, :]
+        dN_in['dD'] = dN_in['dD'][4000, :]
 
+        # Note: when dN_in['D'] has 1 dimension
+        # # convert D and dD from nm to microns and meters separately, and keep the variables for clarity further down
+        # # these are the original bins from the dN data
+        # r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
+        # r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
 
-        # convert D and dD from nm to microns and meters separately, and keep the variables for clarity further down
-        # these are the original bins from the dN data
         r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
         r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
 
@@ -2465,7 +2470,7 @@ if __name__ == '__main__':
     pm10_mass, met, dN, bad_uni = time_match_pm_met_dN(pm10_mass_cut, met_in, dN_in, timeRes)
 
     # free up some memory
-    # del dN_in, met_in, pm10_mass_in, pm10_oc_bc_in
+    del dN_in, met_in, pm10_mass_in, pm10_oc_bc_in
 
     # ==============================================================================
     # Main processing and calculations
@@ -2532,6 +2537,7 @@ if __name__ == '__main__':
         r_d_smps_m = r_m[dN['smps_idx']] # originally dry from measurements
         r_md_aps_m = r_m[dN['aps_idx']] # originally wet from measurements
 
+    # r_d_smps_microns_dup
 
     # 2 - Duplicate 1D arrays so they can be appended onto varying radii from dry SMPS and wet GRIMM data
     r_d_smps_microns_dup = np.tile(r_d_smps_microns, (len(met['time']), 1))
@@ -2603,6 +2609,12 @@ if __name__ == '__main__':
 
     # Caulate the physical growth factor (GF) for the particles (swollen radii / dry radii)
     GF = {aer_i: r_md_microns[aer_i] / r_d_microns[aer_i] for aer_i in aer_particles}
+
+    # free up more space
+    # del r_d_smps_microns_dup, r_d_smps_m_dup, \
+    #     r_md_aps_microns_dup, r_md_aps_m_dup, \
+    #     r_d_aps_microns, r_d_aps_m, \
+    #     r_md_smps_microns, r_md_smps_m
 
     # # ---- just the APS data
     # weighted = {aer_i: GF[aer_i][:, dN['aps_idx']] * N_weight_pm10[aer_i][:, None] for aer_i in aer_particles}
@@ -2985,9 +2997,12 @@ if __name__ == '__main__':
     # C_back = pickle_load_in['optics']['C_back']
     # t_range = range(num_conc['CBLK'].shape[0])
     # D_range = range(num_conc['CBLK'].shape[1])
-    ext_coeff = pickle_load_in['optics']['sigma_ext_all_bins']
-    back_coeff = pickle_load_in['optics']['sigma_back_all_bins']
+
     # need r_md_m to plot on the x axis
+    # ext_coeff = pickle_load_in['optics']['sigma_ext_all_bins']
+    # back_coeff = pickle_load_in['optics']['sigma_back_all_bins']
+    ext_coeff = optics['sigma_ext_all_bins']
+    back_coeff = optics['sigma_back_all_bins']
 
 
     ext_coeff_avg= {aer_i: np.nanmean(ext_coeff[aer_i], axis=0) for aer_i in aer_particles}
@@ -3010,12 +3025,22 @@ if __name__ == '__main__':
 
     for aer_i, d_ext_coeff_avg_i in d_ext_coeff_avg.iteritems():
 
-        plt.semilogx(r_md_microns_avg[aer_i], d_ext_coeff_avg_i, color=aer_colours[aer_i], label=aer_i)
+        # remove bins that overlapped
+        #no_overlap_idx = np.where(dlogD[aer_i] > 0.0)
+        # d_ext_coeff_avg_i = d_ext_coeff_avg['NaCl'] # testing
+        good_aps_idx = np.where(r_md_m_avg[aer_i][dN['aps_idx']] > r_md_m_avg[aer_i][dN['smps_idx']][-1]) # idx of the aps
+        good_idx = np.append(dN['smps_idx'], dN['aps_idx'][good_aps_idx])
+        d_ext_coeff_avg_i = d_ext_coeff_avg[aer_i][good_idx]
+        r_md_microns_avg_i = r_md_microns_avg[aer_i][good_idx]
+
+
+        plt.semilogx(r_md_microns_avg_i, d_ext_coeff_avg_i, color=aer_colours[aer_i], label=aer_i)
+
 
     plt.xlabel('r_md [microns]')
     #plt.xticks(index+width/2.0, [str(i) for i in np.arange(1, len_r_md+1)])
     plt.ylabel('d sigma_ext/dlogD [m-1]')
-    #plt.ylim([0.0, 1.0])
+    plt.ylim([-0.00001, 0.00008])
     plt.legend(loc='best', fontsize = 10, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
 
     plt.tight_layout(h_pad=0.1)
