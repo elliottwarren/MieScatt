@@ -2049,10 +2049,10 @@ if __name__ == '__main__':
     #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
     
     # NK: 2014 - 2016 inclusively
-    # site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-    #     'instruments': ['SMPS', 'APS'], 'ceil_lambda': 1.064e-06}
     site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-    'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
+        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 1.064e-06}
+    # site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
+    # 'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
 
     ceil_lambda = [site_meta['ceil_lambda']]
     period = site_meta['period']
@@ -2179,18 +2179,18 @@ if __name__ == '__main__':
     # with open(filename, 'rb') as handle:
     #     pickle_load_in = pickle.load(handle)
 
-    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905nm.npy'
-    # # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_freshOCGF.npy'
-    # # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
-    # pickle_load_in = np.load(filename).flat[0]
-    #
-    # optics = pickle_load_in['optics']
-    # S = optics['S']
-    # met = pickle_load_in['met']
-    # dN = pickle_load_in['dN']
-    # N_weight_pm10 = pickle_load_in['N_weight']
-    # pm10_mass = pickle_load_in['pm10_mass']
-    # time = pickle_load_in['met']['time']
+    filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_1064nm.npy'
+    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_freshOCGF.npy'
+    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
+    pickle_load_in = np.load(filename).flat[0]
+
+    optics = pickle_load_in['optics']
+    S = optics['S']
+    met = pickle_load_in['met']
+    dN = pickle_load_in['dN']
+    N_weight_pm10 = pickle_load_in['N_weight']
+    pm10_mass = pickle_load_in['pm10_mass']
+    time = pickle_load_in['met']['time']
 
     #
     # key = 'CORG'
@@ -2703,7 +2703,9 @@ if __name__ == '__main__':
 
         # pickle_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str_nm+'.pickle'
         # pickle_save = pickle_optics_save(pickle_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
-        #             ceil_lambda=ceil_lambda)
+        #             ceil_lambda=ceil_lambda)    # -----------------------------
+    # Read
+    # -----------------------------
         # np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.npy'
         np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'.npy'
         np_save = numpy_optics_save(np_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
@@ -2809,6 +2811,35 @@ if __name__ == '__main__':
     # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
     plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.png')
     plt.close(fig)
+
+
+    # ------------------------------------------------
+
+    # SCATTER - S vs backscatter
+
+    tot_backscatter = np.nansum(optics['sigma_back'].values(), axis=0)*1000.0
+    tot_backscatter[tot_backscatter == 0.0] = np.nan
+    idx = np.where(tot_backscatter > 0.0)
+    #log_tot_backscatter = np.log10(tot_backscatter)
+
+    fig, ax = plt.subplots(1,1,figsize=(7, 5))
+
+    scat = ax.scatter(tot_backscatter[idx], S[idx])
+    # cbar = plt.colorbar(scat, ax=ax)
+    # cbar.set_label('Soot [%]', labelpad=-20, y=1.1, rotation=0)
+    # cbar.set_label('[%]', labelpad=-20, y=1.1, rotation=0)
+    plt.xlabel(r'$beta \/[km-1 sr-1]$')
+    plt.ylabel(r'$Lidar Ratio \/[sr]$')
+    plt.ylim([10.0, 90.0])
+    ax.set_xscale('log')
+
+    plt.xlim([1.0e-6, 1.0e-1])
+    plt.tight_layout()
+    plt.suptitle(ceil_lambda_str)
+    # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
+    plt.savefig(savedir + 'S_vs_backscatter_NK_'+ceil_lambda_str+'.png')
+    plt.close(fig)
+
 
     # ------------------------------------------------
 
