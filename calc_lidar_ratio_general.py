@@ -5,7 +5,7 @@ diameter (the discussion version of Geisinger et al., 2018 is clearer and more e
 published version!). Can swell and dry particles from the number distribution (follows the CLASSIC aerosol scheme)!
 
 
-Created by Elliott Tues 23 Jan
+Created by Elliott Tues 23 Jan '18
 Taken from calc_lidar_ratio_numdist.py (designed for a constant number dist, from clearFlo, for NK
 
 Variables and their units are paird together in comments with the units in square brackets i.e.
@@ -13,15 +13,11 @@ variable [units]
 """
 
 import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
 import pickle
-import os
 
 import numpy as np
 import datetime as dt
 from dateutil import tz
-from scipy.stats import spearmanr
-from scipy.stats import pearsonr
 
 import ellUtils as eu
 from mie_sens_mult_aerosol import linear_interpolate_n
@@ -63,14 +59,6 @@ def fixed_radii_for_Nweights():
     rn_pm10_m = {}
     for key in rn_pmlt1p0_m.iterkeys():
         rn_pm10_m[key] = rn_pm10_microns * 1.0e-6
-
-    # # old 2. D < 10 micron
-    # # pm1 to pm10 median volume mean radius calculated from clearflo winter data (calculated volume mean diameter / 2.0)
-    # pm1t10_rv_microns = 1.9848902137534531 / 2.0
-    # # turn units to meters and place an entry for each aerosol
-    # pm1t10_rv_m = {}
-    # for key in rn_pmlt1p0_m.iterkeys():
-    #     pm1t10_rv_m[key] = pm1t10_rv_microns * 1.0e-6
 
 
     # 3. D < 2.5 microns
@@ -134,66 +122,9 @@ def read_organic_carbon_growth_factors(ffoc_gfdir, OCtype='agedOCGF'):
 
     gf_ffoc_raw = np.array(gf_ffoc_raw)[1:, :] # skip header
     gf_ffoc = {'RH_frac': np.array(gf_ffoc_raw[:, 0], dtype=float),
-                'GF': np.array(gf_ffoc_raw[:, 1], dtype=float)}
+                    'GF': np.array(gf_ffoc_raw[:, 1], dtype=float)}
 
     return gf_ffoc
-
-def read_PM1_mass_data(massdatadir, year):
-
-    """
-    Read in the mass data from NK
-    Raw data is micrograms m-3 but converted to and outputed as grams m-3
-    :param year:
-    :return: mass
-    :return qaqc_idx_unique: unique index list where any of the main species observations are missing
-    """
-
-    massfname = 'PM_North_Kensington_'+year+'.csv'
-    massfilepath = massdatadir + massfname
-    massrawData = np.genfromtxt(massfilepath, delimiter=',', dtype="|S20") # includes the header
-
-    mass = {'time': np.array([dt.datetime.strptime(i[0], '%d/%m/%Y %H:%M') for i in massrawData[1:]])}
-
-    # get headers without the site part of it (S04@NK to S04)
-    headers = [i.split('@')[0] for i in massrawData[0][1:]]
-
-    # ignore first entry, as that is the date&time
-    for h, header_site in enumerate(massrawData[0][1:]):
-
-        # get the main part of the header from the
-        split = header_site.split('@')
-        header = split[0]
-
-        if header == 'CL': # (what will be salt)
-            # turn '' into 0.0, as missing values can be when there simply wasn't any salt recorded,
-            # convert from micrograms to grams
-            mass[header] = np.array([0.0 if i[h+1] == '' else i[h+1] for i in massrawData[1:]], dtype=float) * 1e-06
-
-        else: # if not CL
-            # turn '' into nans
-            # convert from micrograms to grams
-            mass[header] = np.array([np.nan if i[h+1] == '' else i[h+1] for i in massrawData[1:]], dtype=float) * 1e-06
-
-
-    # QAQC - turn all negative values in each column into nans if one of them is negative
-    qaqc_idx = {}
-    for header_i in headers:
-        bools = np.logical_or(mass[header_i] < 0.0, np.isnan(mass[header_i]))
-
-        # store bool if it is one of the major pm consituents, so OM10 and OC/BC pm10 data can be removed too
-        if header_i in ['NH4', 'NO3', 'SO4', 'CORG', 'CL', 'CBLK']:
-            qaqc_idx[header_i] = np.where(bools == True)[0]
-
-
-        # turn all values in the row negative
-        for header_j in headers:
-            mass[header_j][bools] = np.nan
-
-    # find unique instances of missing data
-    qaqc_idx_unique = np.unique(np.hstack(qaqc_idx.values()))
-
-
-    return mass, qaqc_idx_unique
 
 def read_PM_mass_data(filepath):
 
@@ -357,45 +288,6 @@ def read_pm10_mass_data(massdatadir, site_meta, year):
 
     return mass
 
-def trim_mass_wxt_times(mass, WXT):
-
-    """
-    Trim the mass and WXT data based on their start and end times
-    DOES NOT CHECK INTERNAL TIME MATCHING (BULK TRIM APPROACH)
-    :return: mass
-    :return: wxt
-    """
-
-    # Find start and end idx for mass and WXT
-    if WXT['time'][0] < mass['time'][0]:
-        wxt_start = np.where(WXT['time'] == mass['time'][0])[0][0]
-        mass_start = 0
-    else:
-        wxt_start = 0
-        mass_start = np.where(mass['time'] == WXT['time'][0])[0][0]
-    # END
-    if WXT['time'][-1] > mass['time'][-1]:
-        wxt_end = np.where(WXT['time'] == mass['time'][-1])[0][0]
-        mass_end = len(mass['time']) - 1
-    else:
-        wxt_end = len(WXT['time']) - 1
-        mass_end = np.where(mass['time'] == WXT['time'][-1])[0][0]
-
-    # create idx ranges where data exists for both mass and WXT
-    wxt_range = np.arange(wxt_start, wxt_end, 1)
-    mass_range = np.arange(mass_start, mass_end, 1)
-
-    # trim data by only selecting the right time ranges
-    for key, data in WXT.iteritems():
-        WXT[key] = data[wxt_range]
-
-    for key, data in mass.iteritems():
-        mass[key] = data[mass_range]
-
-    # returned data should have the same start and end times
-
-    return mass, WXT
-
 
 # Process
 
@@ -469,75 +361,6 @@ def Geisinger_increase_r_bins(dN, r_orig_bins_microns, n_samples=4.0):
     R_dg_microns = R_dg * 1e-3
 
     return R_dg_microns, dN
-
-### not used now
-def WXT_hourly_average(WXT_in):
-
-
-    """
-    Average up the WXT data to hourly values
-    :param WXT_in:
-    :return: WXT_hourly
-    """
-
-    # WXT average up to hourly
-    date_range = np.array(eu.date_range(WXT_in['time'][0], WXT_in['time'][-1] + dt.timedelta(days=1), 60, 'minutes'))
-
-    # set up hourly array
-    WXT_hourly = {'time': date_range}
-    for var in WXT_in.iterkeys():
-        if ((var == 'rawtime') | (var == 'time')) == False:
-
-            WXT_hourly[var] = np.empty(len(date_range))
-            WXT_hourly[var][:] = np.nan
-
-    # take hourly averages of the 15 min data
-    for t, time_t in enumerate(date_range):
-
-        # find data within the hour
-        bool = np.logical_and(WXT_in['time'] > time_t, WXT_in['time'] < (time_t + dt.timedelta(hours=1)))
-
-        for var in WXT_in.iterkeys():
-            if ((var == 'rawtime') | (var == 'time')) == False:
-
-                # take mean of the data
-                WXT_hourly[var][t] = np.nanmean(WXT_in[var][bool])
-
-
-    return WXT_hourly
-
-### not used now
-def internal_time_completion(data, date_range):
-
-    """
-    Set up new dictionary for data with a complete time series (no gaps in the middle).
-    :param: data (must be a dictionary with a list of datetimes with the keyname 'time', i.e. data['time'])
-    :return: data_full
-
-    Done by checking if time_i from the complete date range (with no time gaps) exists in the data, and if so, extract
-    out the values and put it into the new dictionary.
-    """
-
-
-    # set up temporary dictionaries for data (e.g. data_full) with empty arrays for each key, ready to be filled
-    data_full = {}
-    for h in data.iterkeys():
-        data_full[h] = np.empty(len(date_range))
-        data_full[h][:] = np.nan
-
-    # replace time with date range
-    data_full['time'] = date_range
-
-    # step through time and time match data for extraction
-    for t, time_t in enumerate(date_range):
-        idx = np.where(data['time'] == time_t)[0]
-
-        # if not empty, put in the data to new array
-        if idx.size != 0:
-            for h in data.iterkeys():
-                data_full[h][t] = data[h][idx]
-
-    return data_full
 
 def merge_pm_mass(pm_mass_in, pm_oc_bc):
 
@@ -627,52 +450,6 @@ def merge_pm_mass_cheap_match(pm_mass_in, pm_oc_bc):
 
 
     return pm_mass_cut
-
-### not used now
-def coarsen_PM1_mass_hourly(WXT_hourly, PM1_mass):
-
-    """
-    Coarsen the PM1 data from 15 mins to hourly data to match pm10 and WXT hourly data
-    :param WXT_hourly:
-    :param PM1_mass:
-    :return: PM1_mass_hourly
-    """
-
-    # variables to process from PM1_mass (ignore time, pm1, pm10 etc)
-    PM1_process_vars = ['CORG', 'CL', 'CBLK', 'NH4', 'SO4', 'NO3']
-
-    # time match pm1 to WXT_hourly and pm10 data
-    PM1_mass_hourly = {'time': WXT_hourly['time']}
-
-    for key in PM1_process_vars:
-        PM1_mass_hourly[key] = np.empty(len(PM1_mass_hourly['time']))
-        PM1_mass_hourly[key][:] = np.nan
-
-    # define an idx range to time match in, that will 'move' up with each iteration of t, to minimise computation time as
-    #   the 15 min raw array can be very large!
-    start_idx = 0
-    for t, start, end in zip(np.arange(len(PM1_mass_hourly['time'][:-1])), PM1_mass_hourly['time'][:-1], PM1_mass_hourly['time'][1:]):
-
-        # search for matching times only this many idx positions ahead of start_idx
-        end_idx = start_idx + 50
-
-        # print t
-
-        # find where data is within the hour
-        bool = np.logical_and(PM1_mass['time'][start_idx:end_idx] > start, PM1_mass['time'][start_idx:end_idx] <= end)
-        idx_trim = np.where(bool == True)[0] # idx in the [start_idx:end_idx] bit
-        idx = idx_trim + start_idx # idx in the entire array [:]
-
-        if idx.size != 0:
-            for key in PM1_process_vars:
-                PM1_mass_hourly[key][t] = np.nanmean(PM1_mass[key][idx])
-
-            # move the start position by the extra few positions passed during this loop.
-            start_idx += idx_trim[-1]
-
-
-
-    return PM1_mass_hourly
 
 def two_pm_dataset_difference(pm_small_mass, pm_big_mass):
 
@@ -1063,7 +840,7 @@ def merge_two_pm_dataset_num_conc(num_conc_pm2p5, num_conc_pm10m2p5, dN, limit):
 ## masses and moles
 
 ### main masses and moles script
-def calculate_moles_masses(mass, met, aer_particles, inc_soot=False):
+def calculate_moles_masses(mass, met, aer_particles, inc_soot=True):
 
     """
     Calculate the moles and mass [kg kg-1] of the aerosol. Can set soot to on or off (turn all soot to np.nan)
@@ -2037,6 +1814,19 @@ def create_S_climatology(met, S):
 
         return save_dict
 
+# plotting
+
+def quick_dVdlogD_plot(dN_in):
+    
+    # quick plot dV/dlogD data
+    a = np.nanmean(dN_in['dV/dlogD'], axis=0)
+    plt.semilogx(dN_in['D']/1.0e3, a)
+    plt.suptitle('NK')
+    plt.ylabel('dV/dlogD')
+    plt.xlabel('D [microns]')
+    
+    return
+
 # def main():
 if __name__ == '__main__':
 
@@ -2050,28 +1840,13 @@ if __name__ == '__main__':
     
     # NK: 2014 - 2016 inclusively
     site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-        'instruments': ['SMPS', 'APS'], 'ceil_lambda': 1.064e-06}
-    # site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
-    # 'instruments': ['SMPS', 'APS'], 'ceil_lambda': 0.905e-06}
+    'instruments': ['SMPS', 'APS']}
+
+
+    site_meta['ceil_lambda'] = 0.905e-06 # 1.064e-06, 0.532e-06
 
     ceil_lambda = [site_meta['ceil_lambda']]
     period = site_meta['period']
-
-    # use PM1 or pm10 data?
-    # process_type = 'pm10-2p5' # Ch
-    process_type = 'PM10'
-
-    # which PM vars to read in (linked to the process type)
-    # pm_vars = ['pm2p5', 'pm10'] #Ch
-    pm_vars = ['PM10']
-
-    # soot or no soot? (1 = 'withSoot' or 0 = 'noSoot')
-    soot_flag = 1
-
-    if soot_flag == 1:
-        soot_str = 'withSoot'
-    else:
-        soot_str = 'noSoot'
 
     # Geisinger et al., 2017 subsampling?
     Geisinger_subsample_flag = 1
@@ -2089,7 +1864,7 @@ if __name__ == '__main__':
     ceil_lambda_str = str(int(site_meta['ceil_lambda'] * 1e9)) + 'nm'
 
     # string for saving figures and choosing subdirectories
-    savesub = process_type+'_'+soot_str
+    savesub = 'PM10_withSoot'
 
     # directories
     maindir = '/home/nerc/Documents/MieScatt/'
@@ -2097,10 +1872,7 @@ if __name__ == '__main__':
     pickledir = '/home/nerc/Documents/MieScatt/data/pickle/' + site_meta['site_long'] + '/'
 
     # save dir
-    if Geisinger_subsample_flag == 1:
-        savesubdir = savesub
-    else:
-        savesubdir = savesub
+    savesubdir = savesub
 
     # full save directory (including sub directories)
     savedir = maindir + 'figures/LidarRatio/' + savesubdir + '/'
@@ -2111,16 +1883,13 @@ if __name__ == '__main__':
     ffoc_gfdir = '/home/nerc/Documents/MieScatt/data/'
 
     # save all output data as a pickle?
-    picklesave = True
+    npysave = True
 
     # site and instruments used to help with file saves
     savestr = site_meta['site_short'] + '_' + '_'.join(site_meta['instruments'])
 
-    # RH data
-    #wxt_inst_site = 'WXT_KSSW'
-
     # data years
-    years = [2014, 2015, 2016]
+    years = [2014, 2015]
 
     # resolution to average data to (in minutes! e.g. 60)
     timeRes = 60
@@ -2128,8 +1897,7 @@ if __name__ == '__main__':
     # aerosol particles to calculate (OC = Organic carbon, CBLK = black carbon, both already measured)
     # match dictionary keys further down
     aer_particles = ['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG', 'CBLK']
-
-    all_species = ['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG', 'CBLK', 'H2O']
+    all_species   = ['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG', 'CBLK', 'H2O']
     # aer names in the complex index of refraction files
     aer_names = {'(NH4)2SO4': 'Ammonium sulphate', 'NH4NO3': 'Ammonium nitrate',
                 'CORG': 'Organic carbon', 'NaCl': 'Generic NaCl', 'CBLK':'Soot', 'MURK': 'MURK'}
@@ -2169,92 +1937,21 @@ if __name__ == '__main__':
 
     print 'Reading in data...'
 
-    # # read in any pickled S data from before
-    # filename = pickledir+ 'Ch_SMPS_GRIMM_pm10-2p5_withSoot_2016_905.0nm.pickle'
-    # with open(filename, 'rb') as handle:
-    #     pickle_load_in = pickle.load(handle)
-
-    # # read in any pickled S data from before
-    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_905.0nm.pickle'
-    # with open(filename, 'rb') as handle:
-    #     pickle_load_in = pickle.load(handle)
-
-    filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_1064nm.npy'
-    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_freshOCGF.npy'
-    # filename = pickledir + 'NK_SMPS_APS_PM10_withSoot_2015_905nm_agedOCGF_BCimag0.44.npy'
-    pickle_load_in = np.load(filename).flat[0]
-
-    optics = pickle_load_in['optics']
-    S = optics['S']
-    met = pickle_load_in['met']
-    dN = pickle_load_in['dN']
-    N_weight_pm10 = pickle_load_in['N_weight']
-    pm10_mass = pickle_load_in['pm10_mass']
-    time = pickle_load_in['met']['time']
-
+    # # load in previously calculated S data
+    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_'+ceil_lambda_str+'.npy'
+    # npy_load_in = np.load(filename).flat[0]
     #
-    # key = 'CORG'
-    # plt.figure()
-    # a = ~np.isnan(N_weight_pm10[key])
-    # data = N_weight_pm10[key][a]
-    # plt.hist(data, bins=50)
-    # plt.suptitle(key + ' ' + year_str)
-    # # plt.savefig(savedir + 'rel_'+key+'_'+year_str+'.png')
+    # optics = npy_load_in['optics']
+    # S = optics['S']
+    # met = npy_load_in['met']
+    # dN = npy_load_in['dN']
+    # N_weight_pm10 = npy_load_in['N_weight']
+    # pm10_mass = npy_load_in['pm10_mass']
+    # time = npy_load_in['met']['time']
 
-    # a = np.nanmean(dN_in['dV/dlogD'], axis=0)
-    # plt.semilogx(dN_in['D']/1e3, a)
-    # plt.suptitle('NK')
-    # plt.ylabel('dV/dlogD')
-    # plt.xlabel('D [microns]')
+    # quick plot dVdlogD data
+    # quick_dVdlogD_plot(dN)
 
-    # Resave the npy arrays so the UTC timestamp is removed.
-    # remove the UTC timestamp on the array so it can be easily imported on a windows system
-    # pickle_load_in['met']['time'] = np.array([i.replace(tzinfo=None) for i in pickle_load_in['met']['time']])
-    # del pickle_load_in['dN']['time']
-    # del pickle_load_in['pm10_mass']['time']
-    # np.save(filename, pickle_load_in)
-    # print filename + ' has been resaved!'
-
-    # r_d_smps_microns = r_microns[dN['smps_idx']] # originally dry from measurements
-    # r_m_aps_microns = r_microns[dN['aps_idx']] # originally wet from measurements
-    # # meters
-    # r_d_smps_meters = r_meters[dN['smps_idx']] # originally dry from measurements
-    # r_m_aps_meters = r_meters[dN['aps_idx']] # originally wet from measurements
-
-    # r_microns = pickle_load_in['dN']['D'] * 1e-03 / 2.0
-    # r_meters = pickle_load_in['dN']['D'] * 1e-09 / 2.0
-    # r_d_smps_microns = r_microns[pickle_load_in['dN']['smps_idx']] # originally dry from measurements
-    # r_m_aps_microns = r_microns[pickle_load_in['dN']['aps_idx']] # originally wet from measurements
-    # r_d_smps_meters = r_meters[pickle_load_in['dN']['smps_idx']] # originally dry from measurements
-    # r_m_aps_meters = r_meters[pickle_load_in['dN']['aps_idx']] # originally wet from measurements
-    # # then run 2. and 3. to speciate the radius data and make the dry and wet set of sizes.
-    #
-    # pickle_load_in['r_m_microns'] = r_m_microns
-    # pickle_load_in['r_d_microns'] = r_d_microns
-    # np.save(filename, pickle_load_in)
-    # print filename + ' has been resaved!'
-
-
-    # ------------------------------------------------------
-
-    # # load and save S and met together for NK (2015 and 2016)
-    #
-    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_2015_905.0nm.pickle'
-    # with open(filename, 'rb') as handle:
-    #     pickle_2015 = pickle.load(handle)
-    #
-    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_2016_905.0nm.pickle'
-    # with open(filename, 'rb') as handle:
-    #     pickle_2016 = pickle.load(handle)
-    #
-    # S = np.append(pickle_2015['optics']['S'], pickle_2016['optics']['S'])
-    # met = {key: np.append(pickle_2015['met'][key], pickle_2016['met'][key]) for key in pickle_2015['met'].iterkeys()}
-    #
-    # # save S and met as a new pickle
-    # ---------------------------------------
-
-    # for year in years:
-    # year = '2014'
 
     # ============================================
     # Read in number distribution
@@ -2263,86 +1960,25 @@ if __name__ == '__main__':
     # Data needs to be prepared in calc.plot_N_r_obs.py on windows machine, and saved in pickle form to read it in here.
     #  D, dD, logD... dNdlogD, dN ... etc.
 
-    if site_meta['period'] == 'ClearfLo':
+    # if (site_meta['site_long'] == 'North_Kensington') & (site_meta['period'] == 'long_term'):
 
-        # read in clearflo winter number distribution
-        # created on main PC space with calc_plot_N_r_obs.py
-        # !Note: will not work if pickle was saved using protocol=Highest... (for some unknown reason)
-        filename = datadir + 'dN_dmps_aps_clearfloWinter_lt60_cut.pickle'
-        with open(filename, 'rb') as handle:
-            dN_in = pickle.load(handle)
+    # numpy load
+    d_in = np.load(pickledir + 'N_hourly_NK_APS_SMPS_'+year+'.npy') # old
+    dN_in = d_in.flat[0]
 
+    # make sure datetimes are in UTC
+    zone = tz.gettz('UTC')
+    dN_in['time'] = np.array([i.replace(tzinfo=zone) for i in dN_in['time']])
 
-        # Test with the DMPS and APS data: effect in the end was very small.
-        # # increase N in the first 2 bins of APS data as these are small due to the the discrepency between DMPS and APS
-        # # measurements, as the first 3 APS bins are usually low and need to be corrected (Beddows et al ., 2010)
-        # for b in [520, 560]:
-        #     dN_in['binned'][:, dN_in['D'] == b] *= 2.0
+    # remove unwanted variables
+    for key in ['Dn_lt2p5', 'Dv_lt2p5', 'Dv_2p5_10', 'Dn_2p5_10']:
+        if key in dN_in.keys():
+            del dN_in[key]
 
-        # make a median distribution of dN
-        dN_in['med'] = np.nanmedian(dN_in['binned'], axis=0)
-
-        # convert D and dD from nm to microns and meters separately, and keep the variables for clarity further down
-        # these are the original bins from the dN data
-        r_d_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
-        r_d_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
-
-    if (site_meta['site_long'] == 'North_Kensington') & (site_meta['period'] == 'long_term'):
-
-        # Read in NK long term data 2014 - 2016 inclusively
-        # read in number distribution and RH from pickled data
-        # filename = pickledir + 'N_hourly_NK_APS_SMPS_'+year+'.pickle'
-        # with open(filename, 'rb') as handle:
-        #     dN_in = pickle.load(handle)
-
-        # numpy load
-        d_in = np.load(pickledir + 'N_hourly_NK_APS_SMPS_'+year+'.npy') # old
-        dN_in = d_in.flat[0]
-
-
-        # make sure datetimes are in UTC
-        zone = tz.gettz('UTC')
-        dN_in['time'] = np.array([i.replace(tzinfo=zone) for i in dN_in['time']])
-
-        # remove unwanted variables
-        for key in ['Dn_lt2p5', 'Dv_lt2p5', 'Dv_2p5_10', 'Dn_2p5_10']:
-            if key in dN_in.keys():
-                del dN_in[key]
-        dN_in['D'] = dN_in['D'][4000, :]
-        dN_in['dD'] = dN_in['dD'][4000, :]
-
-        # Note: when dN_in['D'] has 1 dimension
-        # # convert D and dD from nm to microns and meters separately, and keep the variables for clarity further down
-        # # these are the original bins from the dN data
-        # r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
-        # r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
-
-        r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
-        r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
-
-
-    if (site_meta['site_long'] == 'Chilbolton') & (site_meta['period'] == '2016'):
-
-        # # read in number distribution and RH from pickled data
-        # filename = datadir + 'N_hourly_Ch_SMPS_GRIMM.pickle'
-        # with open(filename, 'rb') as handle:
-        #     dN_in = pickle.load(handle)
-
-        d_in = np.load(pickledir + 'N_hourly_Ch_SMPS_GRIMM_2016_extra_months.npy')
-        dN_in = d_in.flat[0]
-
-        # make sure datetimes are in UTC
-        zone = tz.gettz('UTC')
-        dN_in['time'] = np.array([i.replace(tzinfo=zone) for i in dN_in['time']])
-
-        # convert D and dD from nm to microns and meters separately, and keep the variables for clarity further down
-        # these are the original bins from the dN data
-        r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0
-        r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0
-
-
-    # convert dN_in['dN'] units from cm-3 to m-3
-    dN_in['dN'] *= 1e6
+    # convert units
+    r_orig_bins_microns = dN_in['D'] * 1e-03 / 2.0 # [nm] to [microns]
+    r_orig_bins_m = dN_in['D'] * 1e-09 / 2.0 # [nm] to [m]
+    dN_in['dN'] *= 1e6 # [cm-3] to [m-3]
 
     # interpolated r values to from the Geisinger et al 2017 approach
     # will increase the number of r bins to (number of r bins * n_samples)
@@ -2360,48 +1996,21 @@ if __name__ == '__main__':
         r_meters = r_orig_bins_m
 
 
-    # # Remove the first 10 idx for APS as the dried APS size range will overlap the swollen SMPS!
-    # idx = np.append(dN_in['smps_idx'], dN_in['aps_idx'][10:])
-    # dN_in['dN'] = dN_in['dN'][:, idx]
-    # dN_in['dN/dlogD'] = dN_in['dN/dlogD'][:, idx]
-    # dN_in['dV/dlogD'] = dN_in['dV/dlogD'][:, idx]
-    # dN_in['D'] = dN_in['D'][idx]
-    # dN_in['dD'] = dN_in['dD'][idx]
-    # r_orig_bins_microns = r_orig_bins_microns[idx]
-    # r_orig_bins_m = r_orig_bins_m[idx]
-    # # remake aps idx to fit the new data
-    # dN_in['aps_idx'] = dN_in['aps_idx'][:-10]
-    #
-    # if Geisinger_subsample_flag == 1:
-    #     # remove idx in geisinger idx ranges
-    #     g_idx = np.append(dN_in['smps_geisinger_idx'], dN_in['aps_geisinger_idx'][40:])
-    #     r_microns = r_microns[g_idx]
-    #     r_meters = r_meters[g_idx]
-    #     dN_in['aps_geisinger_idx'] = dN_in['aps_geisinger_idx'][:-40]
-
-
-
     # ==============================================================================
     # Read meteorological data
     # ==============================================================================
 
-    if (site_meta['site_long'] == 'Chilbolton') & (site_meta['period'] == '2016'):
-
-        # RH, Tair and pressure data was bundled with the dN data, so extract out here to make it clearly separate.
-        met_in = {'time': dN_in['time'], 'RH': dN_in['RH'], 'Tair': dN_in['Tair'], 'press': dN_in['press']}
-
-        if 'RH_frac' not in met_in:
-            met_in['RH_frac'] = met_in['RH'] * 0.01
+    # if (site_meta['site_long'] == 'Chilbolton') & (site_meta['period'] == '2016'):
+    #     # RH, Tair and pressure data was bundled with the dN data, so extract out here to make it clearly separate.
+    #     met_in = {'time': dN_in['time'], 'RH': dN_in['RH'], 'Tair': dN_in['Tair'], 'press': dN_in['press']}
+    #     if 'RH_frac' not in met_in:
+    #         met_in['RH_frac'] = met_in['RH'] * 0.01
 
 
     # met data is already in dN - no need to read it in again
     # if (site_meta['site_long'] == 'North_Kensington') & (site_meta['period'] == 'long_term'):
-    #
-    #     wxtfilepath = datadir + 'WXT_KSSW_' + str(year) + '_15min.nc'
-    #     met_in = eu.netCDF_read(wxtfilepath, vars=['RH', 'Tair','press', 'time'])
-    #     met_in['RH_frac'] = met_in['RH'] * 0.01
-    #     # Change time from 'obs end' to 'start of obs', same as the other datasets
-    #     met_in['time'] -= dt.timedelta(minutes=15)
+    # extract out the meteorological variables
+    met_in = {key: dN_in[key] for key in ['time', 'RH', 'RH_frac', 'Tair', 'press']}
 
 
     # ==============================================================================
@@ -2416,41 +2025,30 @@ if __name__ == '__main__':
     # n_species['CORG'] = complex(n_species['CORG'].real, 0.01)
 
     # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
-    OC_meta = {'type': 'agedOCGF', 'extra': 'BCimag0.44'}
+    OC_meta = {'type': 'agedOCGF', 'extra': ''}
     gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir, OCtype=OC_meta['type'])
-    #print 'OC meta = '
-    #print OC_meta
 
 
     ## Read in species by mass data
     # -----------------------------------------
 
-    if 'PM2p5' in pm_vars:
 
-        # Read in the PM2.5 data [grams m-3]
-        # pm2p5_mass_in, _ = read_PM_mass_data(massdatadir, site_meta, 'PM2p5', year)
-        massfname = 'pm2p5species_Hr_'+site_meta['site_long']+'_DEFRA_'+site_meta['period']+'.csv'
-        pm2p5_massfilepath = massdatadir + massfname
-        pm2p5_mass_in, _ = read_PM_mass_data(pm2p5_massfilepath)
+    # Read in the hourly other pm10 data [grams m-3]
+    massfname = 'PM10species_Hr_'+site_meta['site_short']+'_DEFRA_'+year+'.csv'
+    pm10_massfilepath = massdatadir + massfname
+    pm10_mass_in, _ = read_PM_mass_data(pm10_massfilepath)
 
-    if 'PM10' in pm_vars:
+    # Read in the daily EC and OC data [grams m-3]
+    massfname = 'PM10_OC_EC_Daily_'+site_meta['site_short']+'_DEFRA_'+year+'.csv'
+    massfilepath = massdatadir + massfname
+    pm10_oc_bc_in = read_EC_BC_mass_data(massfilepath)
 
-        # Read in the hourly other pm10 data [grams m-3]
-        massfname = 'PM10species_Hr_'+site_meta['site_short']+'_DEFRA_'+year+'.csv'
-        pm10_massfilepath = massdatadir + massfname
-        pm10_mass_in, _ = read_PM_mass_data(pm10_massfilepath)
+    # linearly interpolate daily data to hourly
+    pm10_oc_bc_in = oc_bc_interp_hourly(pm10_oc_bc_in)
 
-        # Read in the daily EC and OC data [grams m-3]
-        massfname = 'PM10_OC_EC_Daily_'+site_meta['site_short']+'_DEFRA_'+year+'.csv'
-        massfilepath = massdatadir + massfname
-        pm10_oc_bc_in = read_EC_BC_mass_data(massfilepath)
-
-        # linearly interpolate daily data to hourly
-        pm10_oc_bc_in = oc_bc_interp_hourly(pm10_oc_bc_in)
-
-        # merge the pm10 data together and used RH to do it. RH and pm10 merged datasets will be in sync.
-        # takes a bit of time... ~ 2-3 mins for 50k elements
-        pm10_mass_cut = merge_pm_mass_cheap_match(pm10_mass_in, pm10_oc_bc_in)
+    # merge the pm10 data together and used RH to do it. RH and pm10 merged datasets will be in sync.
+    # takes a bit of time... ~ 2-3 mins for 50k elements
+    pm10_mass_cut = merge_pm_mass_cheap_match(pm10_mass_in, pm10_oc_bc_in)
 
 
     # ==============================================================================
@@ -2464,8 +2062,6 @@ if __name__ == '__main__':
     #   the PM, dN, and RH data for that time will be set to nan) -> avoid unrealistic weighting
     print 'time matching data...'
 
-    # extract out the meteorological variables
-    met_in = {key: dN_in[key] for key in ['time', 'RH', 'RH_frac', 'Tair', 'press']}
 
     pm10_mass, met, dN, bad_uni = time_match_pm_met_dN(pm10_mass_cut, met_in, dN_in, timeRes)
 
@@ -2506,9 +2102,9 @@ if __name__ == '__main__':
 
     if process_type == 'PM10':
 
-        pm10_moles, pm10_mass_kg_kg = calculate_moles_masses(pm10_mass, met, aer_particles, inc_soot=soot_flag)
+    pm10_moles, pm10_mass_kg_kg = calculate_moles_masses(pm10_mass, met, aer_particles)
 
-        N_weight_pm10 = N_weights_from_pm_mass(aer_particles, pm10_mass_kg_kg, aer_density, met, rn_pm10_m)
+    N_weight_pm10 = N_weights_from_pm_mass(aer_particles, pm10_mass_kg_kg, aer_density, met, rn_pm10_m)
 
 
     # calculate dry volume from the mass of each species
@@ -2696,7 +2292,7 @@ if __name__ == '__main__':
 
     # save the output data encase it needs to be used again (pickle!)
     #   calculating the lidar ratio for 1 year can take 3-6 hours (depending on len(D))
-    if picklesave == True:
+    if npysave == True:
 
         # remove the UTC timestamp on the array so it can be easily imported on a windows system
         met['time'] = np.array([i.replace(tzinfo=None) for i in met['time']])
@@ -2816,8 +2412,8 @@ if __name__ == '__main__':
     # ------------------------------------------------
 
     # SCATTER - S vs backscatter
-
-    tot_backscatter = np.nansum(optics['sigma_back'].values(), axis=0)*1000.0
+    # tot_backscatter = np.nansum(optics['sigma_back'].values(), axis=0)*1000.0
+    tot_backscatter = np.nansum(np.nansum(optics['sigma_back_all_bins'].values(), axis=0),axis=1)*1000.0
     tot_backscatter[tot_backscatter == 0.0] = np.nan
     idx = np.where(tot_backscatter > 0.0)
     #log_tot_backscatter = np.log10(tot_backscatter)
@@ -2825,9 +2421,6 @@ if __name__ == '__main__':
     fig, ax = plt.subplots(1,1,figsize=(7, 5))
 
     scat = ax.scatter(tot_backscatter[idx], S[idx])
-    # cbar = plt.colorbar(scat, ax=ax)
-    # cbar.set_label('Soot [%]', labelpad=-20, y=1.1, rotation=0)
-    # cbar.set_label('[%]', labelpad=-20, y=1.1, rotation=0)
     plt.xlabel(r'$beta \/[km-1 sr-1]$')
     plt.ylabel(r'$Lidar Ratio \/[sr]$')
     plt.ylim([10.0, 90.0])
@@ -2839,6 +2432,15 @@ if __name__ == '__main__':
     # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
     plt.savefig(savedir + 'S_vs_backscatter_NK_'+ceil_lambda_str+'.png')
     plt.close(fig)
+
+
+
+    # ------------------------------------------------
+
+    fig, ax = plt.subplots(1,1,figsize=(7, 5))
+    plt.plot(dN['D']/1000.0, np.nanmean(dN['dN/dlogD'], axis=0))
+    ax.set_xscale('log')
+    ax.set_yscale('log')
 
 
     # ------------------------------------------------
