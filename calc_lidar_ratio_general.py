@@ -767,43 +767,14 @@ def time_match_pm_met_dN(pm10_mass_in, met_in, dN_in, timeRes):
     met_bad = find_missing_data(met)
     dN_bad = find_missing_data(dN)
 
+    # join the lists together
     bad = np.array(pm10_mass_bad + met_bad + dN_bad)
-
-    # bad = []
-    #
-    # for var in [pm10_mass, met, dN]:
-    #
-    #     for key, data in var.iteritems():
-    #
-    #         bad_temp = []
-    #
-    #         if key not in ['time', 'D', 'dD', 'aps_idx', 'aps_geisinger_idx', 'smps_idx', 'smps_geisinger_idx',
-    #                        'grimm_idx', 'grimm_geisinger_idx']:
-    #
-    #             # number of dimensions for data
-    #             dims = data.ndim
-    #             if dims == 1:
-    #                 for t in range(len(time_range)):
-    #                     if np.isnan(data[t]):
-    #                         bad += [t] # main addition
-    #                         bad_temp +=[t]
-    #
-    #             else:
-    #                 for t in range(len(time_range)):
-    #                     if any(np.isnan(data[t, :]) == True): # any nans in the row
-    #                         bad += [t] # store the time idx as being bad
-    #                         bad_temp +=[t]
-    #
-    #         print '; key: '+key+'; len bad: '+str(len(bad_temp))
 
 
     ## 4.2 find unique bad idxs and make all values at that time nan, across all the variables
     bad_uni = np.unique(np.array(bad))
 
     for var in [pm10_mass, met, dN]:
-
-    #pm10_mass = set_nan_across_obs(pm10_mass, bad_uni)
-
 
         for key, data in var.iteritems():
 
@@ -1853,7 +1824,7 @@ g(RH) |     |       |        |
 
 # Optical properties
 
-def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_m_meters,  n_wet, num_conc, n_samples, r_orig_bins_m):
+def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_m_meters,  n_wet, num_conc, n_samples, r_orig_bins_length):
 
     """
     Calculate the lidar ratio and store all optic calculations in a single dictionary for export and pickle saving
@@ -1906,22 +1877,22 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_m_
             # status tracking
             print '  ' + aer_i
 
-            Q_ext[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            Q_ext[aer_i] = np.empty((len(date_range), r_orig_bins_length))
             Q_ext[aer_i][:] = np.nan
 
-            Q_back[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            Q_back[aer_i] = np.empty((len(date_range), r_orig_bins_length))
             Q_back[aer_i][:] = np.nan
 
-            C_ext[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            C_ext[aer_i] = np.empty((len(date_range), r_orig_bins_length))
             C_ext[aer_i][:] = np.nan
 
-            C_back[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            C_back[aer_i] = np.empty((len(date_range), r_orig_bins_length))
             C_back[aer_i][:] = np.nan
 
-            sigma_ext_all_bins[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            sigma_ext_all_bins[aer_i] = np.empty((len(date_range), r_orig_bins_length))
             sigma_ext_all_bins[aer_i][:] = np.nan
 
-            sigma_back_all_bins[aer_i] = np.empty((len(date_range), len(r_orig_bins_m)))
+            sigma_back_all_bins[aer_i] = np.empty((len(date_range), r_orig_bins_length))
             sigma_back_all_bins[aer_i][:] = np.nan
 
             sigma_ext[aer_i] = np.empty(len(date_range))
@@ -1932,14 +1903,13 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_m_
 
             # 2) for time, t
             for t, time_t in enumerate(date_range):
-            # for t, time_t in zip([135], [WXT_hourly['time'][135]]):
 
                 # status tracking
                 if t in np.arange(0, 35000, 100):
                     print '     ' + str(t)
 
                 # for each r bin
-                for r_bin_idx, r_i in enumerate(r_orig_bins_m):
+                for r_bin_idx in np.arange(r_orig_bins_length):
 
                     # set up the extinction and backscatter efficiencies for this bin range
                     Q_ext_sample = np.empty(int(n_samples))
@@ -1978,7 +1948,9 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_m_
                         # skip instances of nan
                         if ~np.isnan(X_t_r):
 
-                            # would need to swell wider range of particles (93 bins * subsamples)
+                            # calculate optical properties.
+                            # backscatter needs /4pi to converti t from hemispherical backscatter to 180 deg backscatter
+                            #   compared to Marco Marenco's code
                             particle = Mie(x=X_t_r, m=n_wet_t_r)
                             Q_ext_sample[g_idx_i]= particle.qext()
                             Q_back_sample[g_idx_i] = particle.qb() / (4.0 * np.pi)
@@ -1990,40 +1962,30 @@ def calculate_lidar_ratio_geisinger(aer_particles, date_range, ceil_lambda, r_m_
 
 
                     # once Q_back/ext for all subsamples g, have been calculated, Take the average for this main r bin
-                    #   Eqn 17
+                    #   Eqn 17 in Geisinger et al 2016
                     Q_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(Q_ext_sample)
                     Q_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(Q_back_sample)
 
                     # once C_back/ext for all subsamples g, have been calculated, Take the average for this main r bin
-                    #   Eqn 17
+                    #   Eqn 17 Geisinger et al 2016
                     C_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_ext_sample)
                     C_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_back_sample)
 
-                    # # original method using nansum, but nansum of nans gives 0.0 which could introduce an error.
-                    # # once Q_back/ext for all subsamples g, have been calculated, Take the average for this main r bin
-                    # #   Eqn 17
-                    # Q_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(Q_ext_sample)
-                    # Q_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(Q_back_sample)
-                    #
-                    # # once C_back/ext for all subsamples g, have been calculated, Take the average for this main r bin
-                    # #   Eqn 17
-                    # C_ext[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_ext_sample)
-                    # C_back[aer_i][t, r_bin_idx] = (1.0 / n_samples) * np.nansum(C_back_sample)
 
                 # calculate sigma_ext/back for this aerosol
-                # sigma_ext/back_all_bins are to keep contribution at a radii level and for outputting to optics
+                # sigma_ext/back_all_bins are kept to see what the contribution aas at each radii
                 sigma_ext_all_bins[aer_i][t, :] = num_conc[aer_i][t, :] * C_ext[aer_i][t, :]
                 sigma_back_all_bins[aer_i][t, :] = num_conc[aer_i][t, :] * C_back[aer_i][t, :]
 
                 sigma_ext[aer_i][t] = np.nansum(sigma_ext_all_bins[aer_i][t, :])
                 sigma_back[aer_i][t] = np.nansum(sigma_back_all_bins[aer_i][t, :])
 
-    # calculate total sigma_ext/back for all aerosol, and the lidar ratio
+    # calculate total sigma_ext and backcatter for all aerosol, and then the lidar ratio (S)
     sigma_ext_tot = np.nansum(sigma_ext.values(), axis=0)
     sigma_back_tot = np.nansum(sigma_back.values(), axis=0)
     S = sigma_ext_tot / sigma_back_tot
 
-    # store all variables in a dictionary
+    # store main variables in a dictionary
     optics = {'S': S, 'sigma_ext_all_bins': sigma_ext_all_bins, 'sigma_back_all_bins': sigma_back_all_bins}
 
     return optics
@@ -2118,14 +2080,14 @@ def create_S_climatology(met, S):
 # plotting
 
 def quick_dVdlogD_plot(dN_in):
-    
+
     # quick plot dV/dlogD data
     a = np.nanmean(dN_in['dV/dlogD'], axis=0)
     plt.semilogx(dN_in['D']/1.0e3, a)
     plt.suptitle('NK')
     plt.ylabel('dV/dlogD')
     plt.xlabel('D [microns]')
-    
+
     return
 
 # def main():
@@ -2138,7 +2100,7 @@ if __name__ == '__main__':
     # # site information
     # site_meta = {'site_short':'Ch', 'site_long': 'Chilbolton', 'period': '2016',
     #         'instruments': ['SMPS', 'GRIMM'], 'ceil_lambda': 0.905e-06}
-    
+
     # NK: 2014 - 2016 inclusively
     site_meta = {'site_short':'NK', 'site_long': 'North_Kensington', 'period': 'long_term',
     'instruments': ['SMPS', 'APS']}
@@ -2297,6 +2259,15 @@ if __name__ == '__main__':
         r_microns = r_orig_bins_microns
         r_meters = r_orig_bins_m
 
+    # get length of the full original radii array, and the constant dry smps and wet aps sizes, for use in the lidar
+    # ratio function and the particle swelling later on
+    r_orig_bins_length = r_orig_bins_microns.shape[-1]
+    idx = np.where(~np.isnan(R_dg_microns[:, dN_in['smps_geisinger_idx']]))
+    #r_bins_smps =
+
+
+    # free up some space
+    del R_dg_microns, R_dg_m, r_orig_bins_microns, r_orig_bins_m
 
     # ==============================================================================
     # Read meteorological data
@@ -2404,6 +2375,7 @@ if __name__ == '__main__':
         r_d_smps_meters = r_meters[:, dN['smps_idx']] # originally dry from measurements
         r_m_aps_meters = r_meters[:, dN['aps_idx']] # originally wet from measurements
 
+    del r_microns, r_meters
 
     # # 2 - Duplicate 1D arrays so they can be appended onto varying radii from dry SMPS and wet GRIMM data
     # r_d_smps_microns_dup = np.tile(r_d_smps_microns, (len(met['time']), 1))
@@ -2444,11 +2416,11 @@ if __name__ == '__main__':
 
 
     # Dry sizes
-    r_d_microns = {aer_i: np.hstack((r_d_smps_microns, r_d_aps_microns[aer_i])) for aer_i in aer_particles}
+    # r_d_microns = {aer_i: np.hstack((r_d_smps_microns, r_d_aps_microns[aer_i])) for aer_i in aer_particles}
     r_d_meters = {aer_i: np.hstack((r_d_smps_meters, r_d_aps_meters[aer_i])) for aer_i in aer_particles}
 
     # Wet sizes
-    r_m_microns = {aer_i: np.hstack((r_m_smps_microns[aer_i], r_m_aps_microns)) for aer_i in aer_particles}
+    # r_m_microns = {aer_i: np.hstack((r_m_smps_microns[aer_i], r_m_aps_microns)) for aer_i in aer_particles}
     r_m_meters = {aer_i: np.hstack((r_m_smps_meters[aer_i], r_m_aps_meters)) for aer_i in aer_particles}
 
 
@@ -2473,7 +2445,7 @@ if __name__ == '__main__':
     # -----------------------------------------------------------
 
     # Caulate the physical growth factor (GF) for the particles (swollen radii / dry radii)
-    GF = {aer_i: r_m_microns[aer_i] / r_d_microns[aer_i] for aer_i in aer_particles}
+    GF = {aer_i: r_m_meters[aer_i] / r_d_meters[aer_i] for aer_i in aer_particles}
 
     # free up more space
     # del r_d_smps_microns_dup, r_d_smps_meters_dup, \
@@ -2554,7 +2526,7 @@ if __name__ == '__main__':
     print 'calculating optical properties...'
     # The main beast. Calculate all the optical properties, and outputs the lidar ratio
     optics = calculate_lidar_ratio_geisinger(aer_particles, met['time'], ceil_lambda, r_m_meters,  n_wet, num_conc,
-                                    n_samples, r_orig_bins_m)
+                                    n_samples, r_orig_bins_length)
 
     # extract out the lidar ratio
     S = optics['S']
@@ -2581,7 +2553,7 @@ if __name__ == '__main__':
     # ------------------------------------------
 
     # Create and save the S climatology
-    save_dict = create_S_climatology(met, S)
+    # save_dict = create_S_climatology(met, S)
 
     # ------------------------------------------
 
@@ -2657,11 +2629,11 @@ if __name__ == '__main__':
     # corr_pearson = pearsonr(met['RH'][idx], S[idx])
     # corr_spearman = spearmanr(met['RH'][idx], S[idx])
 
-    # SCATTER - S vs RH (PM1)
+    # SCATTER - S vs RH
     # quick plot 15 min S and RH for 2016.
-    # corr = spearmanr(met['RH'], S) <- erronous value - use spearmanr value calculated earlier!!!! ->
-    #   (https://github.com/scipy/scipy/issues/6530)
-    # r_str = '%.2f' % corr[0]
+    #corr = spearmanr(met['RH'], S) # <- erronous value - use spearmanr value calculated earlier!!!! ->
+    # (https://github.com/scipy/scipy/issues/6530)
+    #r_str = '%.2f' % corr[0]
     fig, ax = plt.subplots(1,1,figsize=(8, 4))
     key = 'CBLK'
     scat = ax.scatter(met['RH'], S, c=N_weight_pm10[key]*100.0, vmin= 0.0, vmax = 25.0)
@@ -2674,43 +2646,43 @@ if __name__ == '__main__':
     plt.xlim([20.0, 100.0])
     plt.tight_layout()
     plt.suptitle(ceil_lambda_str)
-    # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
-    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.png')
-    plt.close(fig)
+    # # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
+    # plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.png')
+    # plt.close(fig)
 
 
     # ------------------------------------------------
 
-    # SCATTER - S vs backscatter
-    # tot_backscatter = np.nansum(optics['sigma_back'].values(), axis=0)*1000.0
-    tot_backscatter = np.nansum(np.nansum(optics['sigma_back_all_bins'].values(), axis=0),axis=1)*1000.0
-    tot_backscatter[tot_backscatter == 0.0] = np.nan
-    idx = np.where(tot_backscatter > 0.0)
-    #log_tot_backscatter = np.log10(tot_backscatter)
-
-    fig, ax = plt.subplots(1,1,figsize=(7, 5))
-
-    scat = ax.scatter(tot_backscatter[idx], S[idx])
-    plt.xlabel(r'$beta \/[km-1 sr-1]$')
-    plt.ylabel(r'$Lidar Ratio \/[sr]$')
-    plt.ylim([10.0, 90.0])
-    ax.set_xscale('log')
-
-    plt.xlim([1.0e-6, 1.0e-1])
-    plt.tight_layout()
-    plt.suptitle(ceil_lambda_str)
-    # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
-    plt.savefig(savedir + 'S_vs_backscatter_NK_'+ceil_lambda_str+'.png')
-    plt.close(fig)
+    # # SCATTER - S vs backscatter
+    # # tot_backscatter = np.nansum(optics['sigma_back'].values(), axis=0)*1000.0
+    # tot_backscatter = np.nansum(np.nansum(optics['sigma_back_all_bins'].values(), axis=0),axis=1)*1000.0
+    # tot_backscatter[tot_backscatter == 0.0] = np.nan
+    # idx = np.where(tot_backscatter > 0.0)
+    # #log_tot_backscatter = np.log10(tot_backscatter)
+    #
+    # fig, ax = plt.subplots(1,1,figsize=(7, 5))
+    #
+    # scat = ax.scatter(tot_backscatter[idx], S[idx])
+    # plt.xlabel(r'$beta \/[km-1 sr-1]$')
+    # plt.ylabel(r'$Lidar Ratio \/[sr]$')
+    # plt.ylim([10.0, 90.0])
+    # ax.set_xscale('log')
+    #
+    # plt.xlim([1.0e-6, 1.0e-1])
+    # plt.tight_layout()
+    # plt.suptitle(ceil_lambda_str)
+    # # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
+    # plt.savefig(savedir + 'S_vs_backscatter_NK_'+ceil_lambda_str+'.png')
+    # plt.close(fig)
 
 
 
     # ------------------------------------------------
 
-    fig, ax = plt.subplots(1,1,figsize=(7, 5))
-    plt.plot(dN['D']/1000.0, np.nanmean(dN['dN/dlogD'], axis=0))
-    ax.set_xscale('log')
-    ax.set_yscale('log')
+    # fig, ax = plt.subplots(1,1,figsize=(7, 5))
+    # plt.plot(dN['D']/1000.0, np.nanmean(dN['dN/dlogD'], axis=0))
+    # ax.set_xscale('log')
+    # ax.set_yscale('log')
 
 
     # ------------------------------------------------
@@ -2893,82 +2865,82 @@ if __name__ == '__main__':
 
      # ---------------------------------------
 
-    # LINE PLOT OF EXTINCTION COEFFICIENT
-    # num_conc = pickle_load_in['num_conc']
-    # C_ext = pickle_load_in['optics']['C_ext']
-    # C_back = pickle_load_in['optics']['C_back']
-    # t_range = range(num_conc['CBLK'].shape[0])
-    # D_range = range(num_conc['CBLK'].shape[1])
-
-    # need r_m_meters to plot on the x axis
-    # ext_coeff = pickle_load_in['optics']['sigma_ext_all_bins']
-    # back_coeff = pickle_load_in['optics']['sigma_back_all_bins']
-    ext_coeff = optics['sigma_ext_all_bins']
-    back_coeff = optics['sigma_back_all_bins']
-
-
-    ext_coeff_avg= {aer_i: np.nanmean(ext_coeff[aer_i], axis=0) for aer_i in aer_particles}
-    back_coeff_avg= {aer_i: np.nanmean(back_coeff[aer_i], axis=0) for aer_i in aer_particles}
-
-    r_m_microns_avg = {aer_i: np.nanmean(r_m_microns[aer_i], axis=0) for aer_i in aer_particles}
-    r_m_m_avg = {aer_i: np.nanmean(r_m_meters[aer_i], axis=0) for aer_i in aer_particles}
-    len_r_md = r_m_microns_avg['CBLK'].shape[0]
-
-    # calculate d (/sigma_ext) / dlogD [m-1 /m-3]
-    d_ext_coeff_avg={}
-    dlogD={}
-    for aer_i, r_md_m_avg_i in r_m_m_avg.iteritems():
-        _, _, dlogD[aer_i] = calc_bin_parameters_general(r_md_m_avg_i[None, :])
-        dlogD[aer_i] = np.squeeze(dlogD[aer_i])
-        d_ext_coeff_avg[aer_i] = ext_coeff_avg[aer_i]/dlogD[aer_i]
-
-
-    fig, ax = plt.subplots(1, 1, figsize=(7, 4.5))
-
-    for aer_i, d_ext_coeff_avg_i in d_ext_coeff_avg.iteritems():
-
-        # remove bins that overlapped
-        #no_overlap_idx = np.where(dlogD[aer_i] > 0.0)
-        # d_ext_coeff_avg_i = d_ext_coeff_avg['NaCl'] # testing
-        good_aps_idx = np.where(r_m_m_avg[aer_i][dN['aps_idx']] > r_m_m_avg[aer_i][dN['smps_idx']][-1]) # idx of the aps
-        good_idx = np.append(dN['smps_idx'], dN['aps_idx'][good_aps_idx])
-        d_ext_coeff_avg_i = d_ext_coeff_avg[aer_i][good_idx]
-        r_m_microns_avg_i = r_m_microns_avg[aer_i][good_idx]
-
-
-        plt.semilogx(r_m_microns_avg_i, d_ext_coeff_avg_i, color=aer_colours[aer_i], label=aer_i)
-
-
-    plt.xlabel('r_m [microns]')
-    #plt.xticks(index+width/2.0, [str(i) for i in np.arange(1, len_r_md+1)])
-    plt.ylabel('d sigma_ext/dlogD [m-1]')
-    plt.ylim([-0.00001, 0.00008])
-    plt.legend(loc='best', fontsize = 10, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
-
-    plt.tight_layout(h_pad=0.1)
-    plt.subplots_adjust(top=0.9, right=0.8)
-    plt.savefig(savedir + 'sigma_ext_'+year+'_'+savestr+'_'+ceil_lambda_str+'.png')
-
-    # # where to put the bottom of the bar chart, start at 0 and then move it up with each aer_i iteration
-    # bottom = np.zeros(len_r_md)
-    # index = np.arange(len_r_md)
-    # width = 1.0
+    # # LINE PLOT OF EXTINCTION COEFFICIENT
+    # # num_conc = pickle_load_in['num_conc']
+    # # C_ext = pickle_load_in['optics']['C_ext']
+    # # C_back = pickle_load_in['optics']['C_back']
+    # # t_range = range(num_conc['CBLK'].shape[0])
+    # # D_range = range(num_conc['CBLK'].shape[1])
+    #
+    # # need r_m_meters to plot on the x axis
+    # # ext_coeff = pickle_load_in['optics']['sigma_ext_all_bins']
+    # # back_coeff = pickle_load_in['optics']['sigma_back_all_bins']
+    # ext_coeff = optics['sigma_ext_all_bins']
+    # back_coeff = optics['sigma_back_all_bins']
+    #
+    #
+    # ext_coeff_avg= {aer_i: np.nanmean(ext_coeff[aer_i], axis=0) for aer_i in aer_particles}
+    # back_coeff_avg= {aer_i: np.nanmean(back_coeff[aer_i], axis=0) for aer_i in aer_particles}
+    #
+    # r_m_microns_avg = {aer_i: np.nanmean(r_m_microns[aer_i], axis=0) for aer_i in aer_particles}
+    # r_m_m_avg = {aer_i: np.nanmean(r_m_meters[aer_i], axis=0) for aer_i in aer_particles}
+    # len_r_md = r_m_microns_avg['CBLK'].shape[0]
+    #
+    # # calculate d (/sigma_ext) / dlogD [m-1 /m-3]
+    # d_ext_coeff_avg={}
+    # dlogD={}
+    # for aer_i, r_md_m_avg_i in r_m_m_avg.iteritems():
+    #     _, _, dlogD[aer_i] = calc_bin_parameters_general(r_md_m_avg_i[None, :])
+    #     dlogD[aer_i] = np.squeeze(dlogD[aer_i])
+    #     d_ext_coeff_avg[aer_i] = ext_coeff_avg[aer_i]/dlogD[aer_i]
+    #
+    #
+    # fig, ax = plt.subplots(1, 1, figsize=(7, 4.5))
     #
     # for aer_i, d_ext_coeff_avg_i in d_ext_coeff_avg.iteritems():
     #
-    #     plt.bar(dlogD[aer_i], d_ext_coeff_avg_i, bottom=bottom, width=width, color=aer_colours[aer_i], label=aer_i)
+    #     # remove bins that overlapped
+    #     #no_overlap_idx = np.where(dlogD[aer_i] > 0.0)
+    #     # d_ext_coeff_avg_i = d_ext_coeff_avg['NaCl'] # testing
+    #     good_aps_idx = np.where(r_m_m_avg[aer_i][dN['aps_idx']] > r_m_m_avg[aer_i][dN['smps_idx']][-1]) # idx of the aps
+    #     good_idx = np.append(dN['smps_idx'], dN['aps_idx'][good_aps_idx])
+    #     d_ext_coeff_avg_i = d_ext_coeff_avg[aer_i][good_idx]
+    #     r_m_microns_avg_i = r_m_microns_avg[aer_i][good_idx]
     #
-    #     # move the bottom of the bar location up, for the next iteration
-    #     bottom += d_ext_coeff_avg_i
+    #
+    #     plt.semilogx(r_m_microns_avg_i, d_ext_coeff_avg_i, color=aer_colours[aer_i], label=aer_i)
+    #
     #
     # plt.xlabel('r_m [microns]')
     # #plt.xticks(index+width/2.0, [str(i) for i in np.arange(1, len_r_md+1)])
     # plt.ylabel('d sigma_ext/dlogD [m-1]')
-    # #plt.ylim([0.0, 1.0])
-    # plt.legend(loc='best', fontsize = 8, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
+    # plt.ylim([-0.00001, 0.00008])
+    # plt.legend(loc='best', fontsize = 10, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
     #
     # plt.tight_layout(h_pad=0.1)
     # plt.subplots_adjust(top=0.9, right=0.8)
+    # plt.savefig(savedir + 'sigma_ext_'+year+'_'+savestr+'_'+ceil_lambda_str+'.png')
+    #
+    # # # where to put the bottom of the bar chart, start at 0 and then move it up with each aer_i iteration
+    # # bottom = np.zeros(len_r_md)
+    # # index = np.arange(len_r_md)
+    # # width = 1.0
+    # #
+    # # for aer_i, d_ext_coeff_avg_i in d_ext_coeff_avg.iteritems():
+    # #
+    # #     plt.bar(dlogD[aer_i], d_ext_coeff_avg_i, bottom=bottom, width=width, color=aer_colours[aer_i], label=aer_i)
+    # #
+    # #     # move the bottom of the bar location up, for the next iteration
+    # #     bottom += d_ext_coeff_avg_i
+    # #
+    # # plt.xlabel('r_m [microns]')
+    # # #plt.xticks(index+width/2.0, [str(i) for i in np.arange(1, len_r_md+1)])
+    # # plt.ylabel('d sigma_ext/dlogD [m-1]')
+    # # #plt.ylim([0.0, 1.0])
+    # # plt.legend(loc='best', fontsize = 8, bbox_to_anchor=(1.02, 1), borderaxespad=0.0)
+    # #
+    # # plt.tight_layout(h_pad=0.1)
+    # # plt.subplots_adjust(top=0.9, right=0.8)
 
 
     print 'END PROGRAM'
