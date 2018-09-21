@@ -1114,7 +1114,7 @@ def calc_r_m_all(r_d_microns, met, pm_mass, gf_ffoc):
     Swell the diameter bins for a set list of aerosol species below:
     ['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CBLK', 'CORG']
 
-    :param r_d_microns_t:
+    :param r_d_microns: (dict - keys: aer_particles):
     :param met:
     :param pm_mass:
     :param gf_ffoc:
@@ -1131,13 +1131,13 @@ def calc_r_m_all(r_d_microns, met, pm_mass, gf_ffoc):
     # Follows CLASSIC guidence, based off of Fitzgerald (1975)
     # guidance requires radii units to be microns
     for aer_i in ['(NH4)2SO4', 'NH4NO3', 'NaCl']:
-        r_m[aer_i] = calc_r_m_species_with_hysteresis(r_d_microns, met, aer_i)
+        r_m[aer_i] = calc_r_m_species_with_hysteresis(r_d_microns[aer_i], met, aer_i)
 
     ## 2. Black carbon ('CBLK')
 
     # set r_m for black carbon as r_d, assuming black carbon is completely hydrophobic
     # create a r_microns_dry_dup (rbins copied for each time, t) to help with calculations
-    r_m['CBLK'] = r_d_microns
+    r_m['CBLK'] = r_d_microns['CBLK']
 
     # make r_m['CBLK'] nan for all sizes, for times t, if mass data is not present for time t
     # doesn't matter which mass is used, as all mass data have been corrected for if nans were present in other datasets
@@ -1146,19 +1146,18 @@ def calc_r_m_all(r_d_microns, met, pm_mass, gf_ffoc):
     ## 3. Organic carbon ('CORG')
 
     # calculate r_m for organic carbon using the MO empirically fitted g(RH) curves
-    r_m['CORG'] = np.empty((r_d_smps_microns.shape))
+    r_m['CORG'] = np.empty((r_d_microns['CORG'].shape))
     r_m['CORG'][:] = np.nan
 
     for t, time_t in enumerate(met['time']):
         _, idx, _ = eu.nearest(gf_ffoc['RH_frac'], met['RH_frac'][t])
-        r_m['CORG'][t, :] = r_d_microns[t, :] * gf_ffoc['GF'][idx]
+        r_m['CORG'][t, :] = r_d_microns['CORG'][t, :] * gf_ffoc['GF'][idx]
 
 
     # convert r_m units from [microns] to [meters]
     r_m_meters = {}
     for aer_i in r_m.iterkeys():
         r_m_meters[aer_i] = r_m[aer_i] * 1e-06
-
 
     return r_m, r_m_meters
 
@@ -1315,7 +1314,7 @@ def calc_r_m_species(r_d_microns_t, met, aer_i):
 
     return r_m
 
-def calc_r_m_species_with_hysteresis(r_d_microns, met, aer_i):
+def calc_r_m_species_with_hysteresis(r_d_microns_aer_i, met, aer_i):
 
     """
     Calculate the r_m [microns] for all particles, given the RH [fraction] and what species
@@ -1333,7 +1332,7 @@ g(RH) |     |       |        |
             RH [%]
 
 
-    :param r_d_microns:
+    :param r_d_microns_aer_i:
     :param met: meteorological variables (needed for RH and time)
     :param aer_i:
     :return: r_m_t: swollen radii at time, t
@@ -1376,7 +1375,7 @@ g(RH) |     |       |        |
     #   Therefore this approach works for constant and time varying number distirbutions.
 
     # Set up array for aerosol
-    r_m = np.empty((r_d_microns.shape))
+    r_m = np.empty((r_d_microns_aer_i.shape))
     r_m[:] = np.nan
 
     # phi = np.empty(len(met['time']))
@@ -1412,12 +1411,12 @@ g(RH) |     |       |        |
 
     # below efflorescence point (0.3 for sulhate, r_m = r_d)
     rh_lt_eff = met['RH_frac'] <= rh_eff
-    r_m[rh_lt_eff, :] = r_d_microns[rh_lt_eff, :]
+    r_m[rh_lt_eff, :] = r_d_microns_aer_i[rh_lt_eff, :]
 
     # --- zone 4- delequescence -> rh cap (defined as 0.995. Above this empirical relationship breaks down) --- #
     low_zone4 = np.where((met['RH_frac'] >= rh_del) & (met['RH_frac'] <= rh_cap))[0]
     for idx in low_zone4:
-        r_m[idx, :] = calc_r_m_t(r_d_microns[idx, :], met['RH_frac'][idx], alpha_factor)
+        r_m[idx, :] = calc_r_m_t(r_d_microns_aer_i[idx, :], met['RH_frac'][idx], alpha_factor)
 
 
     # --- zone 5 --- above rh_cap of RH = 95 % ------#
@@ -1426,7 +1425,7 @@ g(RH) |     |       |        |
     # replace all r_m values above 0.995 with 0.995
     zone5 = np.where(met['RH_frac'] > rh_cap)[0]
     for idx in zone5:
-        r_m[idx, :] = calc_r_m_t(r_d_microns[idx, :], rh_cap, alpha_factor)
+        r_m[idx, :] = calc_r_m_t(r_d_microns_aer_i[idx, :], rh_cap, alpha_factor)
 
 
     # ------ zone 2 and 3 --- efflorescence to deliquescence ----------#
@@ -1454,9 +1453,9 @@ g(RH) |     |       |        |
         # 2. find out if we're in zone 2 or 3 (between eff and del) and make r_m = r_d if dry, or swell it if wet
         if (rh_t > rh_eff) & (rh_t < rh_del):
             if state == 'dry':
-                r_m[t, :] = r_d_microns[t, :]
+                r_m[t, :] = r_d_microns_aer_i[t, :]
             else:
-                r_m[t, :] = calc_r_m_t(r_d_microns[t, :], rh_t, alpha_factor)
+                r_m[t, :] = calc_r_m_t(r_d_microns_aer_i[t, :], rh_t, alpha_factor)
 
     return r_m
 
@@ -1466,7 +1465,7 @@ def calc_r_d_all(r_m_microns, met, pm_mass, gf_ffoc):
     Calculate r_d [microns] for all particles, given the RH [fraction] and what species
     Dries particles from a wet radius
 
-    :param r_d_microns:
+    :param r_m_microns:
     :param met: meteorological variables (needed for RH and time)
     :param aer_i:
     :return: r_d: dry radii [mircons]
@@ -1487,23 +1486,23 @@ def calc_r_d_all(r_m_microns, met, pm_mass, gf_ffoc):
     # guidance requires radii units to be microns
     # had to be reverse calculated from CLASSIC guidence.
     for aer_i in ['(NH4)2SO4', 'NH4NO3', 'NaCl']:
-        r_d[aer_i] = calc_r_d_species_with_hysteresis(r_m_microns, met, aer_i) # [microns]
+        r_d[aer_i] = calc_r_d_species_with_hysteresis(r_m_microns[aer_i], met, aer_i) # [microns]
 
     # set r_d for black carbon as r_d, assuming black carbon is completely hydrophobic
     # create a r_d_microns_dry_dup (rbins copied for each time, t) to help with calculations
-    r_d['CBLK'] = r_m_microns # [microns]
+    r_d['CBLK'] = r_m_microns['CBLK'] # [microns]
 
     # make r_d['CBLK'] nan for all sizes, for times t, if mass data is not present for time t
     # doesn't matter which mass is used, as all mass data have been corrected for if nans were present in other datasets
     r_d['CBLK'][np.isnan(pm_mass['CBLK']), :] = np.nan
 
     # calculate r_d for organic carbon using the MO empirically fitted g(RH) curves
-    r_d['CORG'] = np.empty((r_m_microns.shape))
+    r_d['CORG'] = np.empty((r_m_microns['CORG'].shape))
     r_d['CORG'][:] = np.nan
 
     for t, time_t in enumerate(met['time']):
         _, idx, _ = eu.nearest(gf_ffoc['RH_frac'], met['RH_frac'][t])
-        r_d['CORG'][t, :] = r_m_microns[t, :] / gf_ffoc['GF'][idx] # [microns]
+        r_d['CORG'][t, :] = r_m_microns['CORG'][t, :] / gf_ffoc['GF'][idx] # [microns]
 
     # convert r_m units from microns to meters
     r_d_meters = {}
@@ -1674,7 +1673,7 @@ def calc_r_d_species(r_m_microns_t, met, aer_i):
 
     return r_d
 
-def calc_r_d_species_with_hysteresis(r_m_microns, met, aer_i):
+def calc_r_d_species_with_hysteresis(r_m_microns_aer_i, met, aer_i):
 
     """
     Calculate the r_d [microns] for all particles, given the RH [fraction] and what species
@@ -1692,7 +1691,7 @@ g(RH) |     |       |        |
             RH [%]
 
 
-    :param r_m_microns:
+    :param r_m_microns_aer_i:
     :param met: meteorological variables (needed for RH and time)
     :param aer_i:
     :return: r_m_t: swollen radii at time, t
@@ -1731,7 +1730,7 @@ g(RH) |     |       |        |
 
 
     # Set up array for aerosol
-    r_d =  np.empty((r_m_microns.shape))
+    r_d =  np.empty((r_m_microns_aer_i.shape))
     r_d[:] = np.nan
 
     # phi = np.empty(len(met['time']))
@@ -1767,12 +1766,12 @@ g(RH) |     |       |        |
 
     # below efflorescence point (0.3 for sulhate, r_d = r_d)
     rh_lt_eff = met['RH_frac'] <= rh_eff
-    r_d[rh_lt_eff, :] = r_m_microns[rh_lt_eff, :]
+    r_d[rh_lt_eff, :] = r_m_microns_aer_i[rh_lt_eff, :]
 
     # --- zone 4- delequescence -> rh cap (defined as 0.995. Above this empirical relationship breaks down) --- #
     low_zone4 = np.where((met['RH_frac'] >= rh_del) & (met['RH_frac'] <= rh_cap))[0]
     for idx in low_zone4:
-        r_d[idx, :] = calc_r_d_t(r_m_microns[idx, :], met['RH_frac'][idx], alpha_factor)
+        r_d[idx, :] = calc_r_d_t(r_m_microns_aer_i[idx, :], met['RH_frac'][idx], alpha_factor)
 
 
     # --- zone 5 --- above rh_cap of RH = 95 % ------#
@@ -1781,7 +1780,7 @@ g(RH) |     |       |        |
     # replace all r_d values above 0.995 with 0.995
     zone5 = np.where(met['RH_frac'] > rh_cap)[0]
     for idx in zone5:
-        r_d[idx, :] = calc_r_d_t(r_m_microns[idx, :], rh_cap, alpha_factor)
+        r_d[idx, :] = calc_r_d_t(r_m_microns_aer_i[idx, :], rh_cap, alpha_factor)
 
 
     # ------ zone 2 and 3 --- efflorescence to deliquescence ----------#
@@ -1809,9 +1808,9 @@ g(RH) |     |       |        |
         # 2. find out if we're in zone 2 or 3 (between eff and del) and make r_d = r_d if dry, or swell it if wet
         if (rh_t > rh_eff) & (rh_t < rh_del):
             if state == 'dry':
-                r_d[t, :] = r_m_microns[t, :]
+                r_d[t, :] = r_m_microns_aer_i[t, :]
             else:
-                r_d[t, :] = calc_r_d_t(r_m_microns[t, :], rh_t, alpha_factor)
+                r_d[t, :] = calc_r_d_t(r_m_microns_aer_i[t, :], rh_t, alpha_factor)
 
     return r_d
 
@@ -2182,6 +2181,13 @@ if __name__ == '__main__':
                    'CORG': 1.0, # Zelenyuk et al., 2006
                    'CBLK': 1.2} # Zhang et al., 2016
 
+
+    # effloresence and deliquesence limits for 3 of the hygroscopic particles. The limits of organic carbon
+    # are not known and therefore cannot be used in the shape correction factor.
+    particle_states = {'(NH4)2SO4': {'rh_eff': 0.30, 'rh_del': 0.81},
+                   'NH4NO3': {'rh_eff': 0.30, 'rh_del': 0.61},
+                   'NaCl': {'rh_eff': 0.42, 'rh_del': 0.75}}
+
     # pure water density
     water_density = 1000.0 # kg m-3
 
@@ -2363,38 +2369,75 @@ if __name__ == '__main__':
 
     print 'swelling/drying particles...'
 
-    # 1 - extract particle radii from each instrument, as some need swelling, others drying
+    # 1 - extract the original particle radii from each instrument, as some need swelling, others drying
     # Original - SMPS: dry; APS: wet
     if Geisinger_subsample_flag == 1:
-        r_d_smps_microns = r_microns[:, dN['smps_geisinger_idx']] # originally dry from measurements
-        r_m_aps_microns = r_microns[:, dN['aps_geisinger_idx']] # originally wet from measurements
-
-        # meters
-        r_d_smps_meters = r_meters[:, dN['smps_geisinger_idx']] # originally dry from measurements
-        r_m_aps_meters = r_meters[:, dN['aps_geisinger_idx']] # originally wet from measurements
+        smps_idx = dN['smps_geisinger_idx']
+        aps_idx = dN['aps_geisinger_idx']
     else:
-        r_d_smps_microns = r_microns[:, dN['smps_idx']] # originally dry from measurements
-        r_m_aps_microns = r_microns[:, dN['aps_idx']] # originally wet from measurements
+        smps_idx = dN['smps_idx']
+        aps_idx = dN['aps_idx']
 
-        # meters
-        r_d_smps_meters = r_meters[:, dN['smps_idx']] # originally dry from measurements
-        r_m_aps_meters = r_meters[:, dN['aps_idx']] # originally wet from measurements
+    r_d_smps_microns = {aer_i: r_microns[:, smps_idx] for aer_i in aer_particles} # originally dry from measurements
+    r_m_aps_microns  = {aer_i: r_microns[:, aps_idx] for aer_i in aer_particles} # originally wet from measurements
+
+    # meters
+    r_d_smps_meters = {aer_i: r_meters[:, smps_idx] for aer_i in aer_particles} # originally dry from measurements
+    r_m_aps_meters = {aer_i: r_meters[:, aps_idx] for aer_i in aer_particles} # originally wet from measurements
+
 
     # del r_microns, r_meters
 
-    # # 2 - Duplicate 1D arrays so they can be appended onto varying radii from dry SMPS and wet GRIMM data
-    # r_d_smps_microns_dup = np.tile(r_d_smps_microns, (len(met['time']), 1))
-    # r_m_aps_microns_dup = np.tile(r_m_aps_microns, (len(met['time']), 1))
-    #
-    # r_d_smps_meters_dup = np.tile(r_d_smps_meters, (len(met['time']), 1))
-    # r_m_aps_meters_dup = np.tile(r_m_aps_meters, (len(met['time']), 1))
+    # 2 - apply shape correction factor on all dry particles (all smps sizes and aps sizes only when in zone 1 or 2 of
+    # the hysteresis curves -> see hysteresis swelling/drying code for a diagram)
+
+    # smps drying (d_m = d_v / X)
+    for aer_i in aer_particles:
+        r_d_smps_microns[aer_i] = r_d_smps_microns[aer_i] / shape_factor[aer_i]
+        r_d_smps_meters[aer_i] = r_d_smps_meters[aer_i] / shape_factor[aer_i]
+
+    # APS for soot and particles in zone 1 and 2. Cannot correct OC as we don't have its eff and del points
+    # APS data does need correcting because d_a -> d_v depends on density as well as shape
+    x = aer_density['CBLK'] / (shape_factor['CBLK'] * water_density)
+    r_m_aps_microns['CBLK'] = r_m_aps_microns['CBLK'] / np.sqrt(x)
+    r_m_aps_meters['CBLK'] = r_m_aps_meters['CBLK'] / np.sqrt(x)
+
+    # correct ['(NH4)2SO4', 'NH4NO3', 'NaCl'] if they are in zone 1 or 2
+
+    for aer_i in ['(NH4)2SO4', 'NH4NO3', 'NaCl']:
+
+        # ToDo - find first time instance when RH is not nan and use that to better define the initial state
+        # start point (needs to be something)
+        state = 'wet'
+
+        for t, rh_t in enumerate(met['RH_frac']):
+
+            # 1. figure out new state for time_t
+            if rh_t <= particle_states[aer_i]['rh_eff']:
+                state = 'dry'
+            elif rh_t >= particle_states[aer_i]['rh_del']:
+                state = 'wet'
+            else: # between eff and del
+                # state is unchanged
+                state = state
+
+            # 2. apply shape correction factor for this instance in time, if the particle is dry (not made more
+            #          spherical by the addition of water)
+            if state == 'dry':
+
+                x = aer_density[aer_i] / (shape_factor[aer_i] * water_density)
+                r_m_aps_microns[aer_i][t, :] = r_m_aps_microns[aer_i][t, :] / np.sqrt(x)
+                r_m_aps_microns[aer_i][t, :] = r_m_aps_microns[aer_i][t, :] / np.sqrt(x)
+
+
 
     # 3 - Apply nan filter where obs are missing onto the duplicated arrays so
-    r_d_smps_microns[bad_uni, :] = np.nan
-    r_m_aps_microns[bad_uni, :] = np.nan
+    for aer_i in aer_particles:
+        r_d_smps_microns[aer_i][bad_uni, :] = np.nan
+        r_m_aps_microns[aer_i][bad_uni, :] = np.nan
 
-    r_d_smps_meters[bad_uni, :] = np.nan
-    r_m_aps_meters[bad_uni, :] = np.nan
+        r_d_smps_meters[aer_i][bad_uni, :] = np.nan
+        r_m_aps_meters[aer_i][bad_uni, :] = np.nan
 
 
     # ---------------------------------------------------------
@@ -2403,11 +2446,13 @@ if __name__ == '__main__':
     # r_m_meters [meters]
 
     # Swell the dry SMPS (which have the same DRY sizes for all times steps, therefore just put in the first time step)
+    # input to this function is the raddi in [microns]
     r_m_smps_microns, r_m_smps_meters = calc_r_m_all(r_d_smps_microns, met, pm10_mass, gf_ffoc)
 
     # -----------------------------------------------------------
 
     # Dry particles (dry the wet APS)
+    # input to this function is the raddi in [microns]
     r_d_aps_microns, r_d_aps_meters = calc_r_d_all(r_m_aps_microns, met, pm10_mass, gf_ffoc)
 
 
@@ -2422,11 +2467,11 @@ if __name__ == '__main__':
 
     # Dry sizes
     # r_d_microns = {aer_i: np.hstack((r_d_smps_microns, r_d_aps_microns[aer_i])) for aer_i in aer_particles}
-    r_d_meters = {aer_i: np.hstack((r_d_smps_meters, r_d_aps_meters[aer_i])) for aer_i in aer_particles}
+    r_d_meters = {aer_i: np.hstack((r_d_smps_meters[aer_i], r_d_aps_meters[aer_i])) for aer_i in aer_particles}
 
     # Wet sizes
     # r_m_microns = {aer_i: np.hstack((r_m_smps_microns[aer_i], r_m_aps_microns)) for aer_i in aer_particles}
-    r_m_meters = {aer_i: np.hstack((r_m_smps_meters[aer_i], r_m_aps_meters)) for aer_i in aer_particles}
+    r_m_meters = {aer_i: np.hstack((r_m_smps_meters[aer_i], r_m_aps_meters[aer_i])) for aer_i in aer_particles}
 
 
     # -----------------------------------------------------------
@@ -2523,7 +2568,7 @@ if __name__ == '__main__':
 
     # calculate n_wet for each rbin (complex refractive index of dry aerosol and water based on physical growth)
     #   follows CLASSIC scheme parameterisation
-    n_wet = {aer_i: (n_species[aer_i] / (GF[aer_i] ** 3.0)) + (n_species['H2O'] * (1 - (1/(GF[aer_i] ** 3.0))))
+    n_wet = {aer_i: (n_species[aer_i] / (GF[aer_i] ** 3.0)) + (n_species['H2O'] * (1.0 - (1.0/(GF[aer_i] ** 3.0))))
              for aer_i in aer_particles}
 
     # --------------------------
@@ -2550,7 +2595,7 @@ if __name__ == '__main__':
         # Read
         # -----------------------------
         # np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.npy'
-        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_hysteresis.npy'
+        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_hysteresis_shapecorr.npy'
         np_save = numpy_optics_save(np_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda, r_m_meters=r_m_meters)
         print np_savename + ' is saved!'
@@ -2652,7 +2697,7 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.suptitle(ceil_lambda_str)
     # # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
-    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'withHyst.png')
+    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'withHyst_shapecorr.png')
     # plt.close(fig)
 
 
