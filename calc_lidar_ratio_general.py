@@ -2390,19 +2390,27 @@ if __name__ == '__main__':
 
     # 2 - apply shape correction factor on all dry particles (all smps sizes and aps sizes only when in zone 1 or 2 of
     # the hysteresis curves -> see hysteresis swelling/drying code for a diagram)
+    # Turn SMPS mobility diameter and APS aerodynamic diameter into volume equivalent diameter
 
-    # smps drying (d_m = d_v / X)
+    # 2.1 SMPS mobility diameter correction (d_m = d_v / X)
     for aer_i in aer_particles:
         r_d_smps_microns[aer_i] = r_d_smps_microns[aer_i] / shape_factor[aer_i]
         r_d_smps_meters[aer_i] = r_d_smps_meters[aer_i] / shape_factor[aer_i]
 
+    # 2.2 APS aerodynamic diameter correction
     # APS for soot and particles in zone 1 and 2. Cannot correct OC as we don't have its eff and del points
     # APS data does need correcting because d_a -> d_v depends on density as well as shape
     x = aer_density['CBLK'] / (shape_factor['CBLK'] * water_density)
     r_m_aps_microns['CBLK'] = r_m_aps_microns['CBLK'] / np.sqrt(x)
     r_m_aps_meters['CBLK'] = r_m_aps_meters['CBLK'] / np.sqrt(x)
 
-    # correct ['(NH4)2SO4', 'NH4NO3', 'NaCl'] if they are in zone 1 or 2
+    # correct OC using a shape factor of 1 (doesn't matter what zone it is in - relevent for all zones)
+    x = aer_density['CORG'] / (shape_factor['CORG'] * water_density)
+    r_m_aps_microns['CORG'] = r_m_aps_microns['CORG'] / np.sqrt(x)
+    r_m_aps_meters['CORG'] = r_m_aps_meters['CORG'] / np.sqrt(x)
+
+    # correct ['(NH4)2SO4', 'NH4NO3', 'NaCl'] using their dry shape factors if they are in zone 1 or 2
+    # else, correct APS data for these particle types, using a shape factor of 1.
 
     for aer_i in ['(NH4)2SO4', 'NH4NO3', 'NaCl']:
 
@@ -2427,8 +2435,11 @@ if __name__ == '__main__':
 
                 x = aer_density[aer_i] / (shape_factor[aer_i] * water_density)
                 r_m_aps_microns[aer_i][t, :] = r_m_aps_microns[aer_i][t, :] / np.sqrt(x)
+                r_m_aps_meters[aer_i][t, :] = r_m_aps_meters[aer_i][t, :] / np.sqrt(x)
+            else:
+                x = aer_density[aer_i] / (1.0 * water_density)
                 r_m_aps_microns[aer_i][t, :] = r_m_aps_microns[aer_i][t, :] / np.sqrt(x)
-
+                r_m_aps_meters[aer_i][t, :] = r_m_aps_meters[aer_i][t, :] / np.sqrt(x)
 
 
     # 3 - Apply nan filter where obs are missing onto the duplicated arrays so
