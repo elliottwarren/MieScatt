@@ -2197,7 +2197,7 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2015'
+    year = '2014'
     year_str = str(year)
 
     # ============================================
