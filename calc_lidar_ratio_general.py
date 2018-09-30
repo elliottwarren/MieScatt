@@ -2206,19 +2206,34 @@ if __name__ == '__main__':
 
     print 'Reading in data...'
 
-    # # load in previously calculated S data
-    # filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_'+ceil_lambda_str+'.npy'
-    # npy_load_in = np.load(filename).flat[0]
-    #
-    # optics = npy_load_in['optics']
-    # S = optics['S']
-    # met = npy_load_in['met']
-    # dN = npy_load_in['dN']
-    # N_weight_pm10 = npy_load_in['N_weight']
-    # pm10_mass = npy_load_in['pm10_mass']
-    # time = npy_load_in['met']['time']
+    # load in previously calculated S data
+    #filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_'+ceil_lambda_str+'_hysteresis_shapecorr.npy'
+    filename = '/home/nerc/Documents/MieScatt/data/pickle/North_Kensington/NK_SMPS_APS_PM10_withSoot_2014_905nm_hysteresis_shapecorr.npy'
+    npy_load_in = np.load(filename).flat[0]
 
+    optics = npy_load_in['optics']
+    S = optics['S']
 
+    met = npy_load_in['met']
+    dN = npy_load_in['dN']
+    N_weight_pm10 = npy_load_in['N_weight']
+    pm10_mass = npy_load_in['pm10_mass']
+    num_conc = npy_load_in['pm10_mass']
+    time = npy_load_in['met']['time']
+
+    # remove the timezone and resave
+    npy_load_in['met']['time'] = np.array([i.replace(tzinfo=None) for i in met['time']])
+    npy_load_in['dN']['time'] = np.array([i.replace(tzinfo=None) for i in dN['time']])
+    npy_load_in['pm10_mass']['time'] = np.array([i.replace(tzinfo=None) for i in pm10_mass['time']])
+    np.save(filename, npy_load_in)
+
+    #idx = np.isfinite(allS) & np.isfinite(allRH)
+    #z = np.polyfit(allRH[idx]/100.0, allS[idx], 1)
+    #p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as GF was regressed against RH_frac)
+
+    #  -----------------------------
+    # Read
+    # -----------------------------
 
     # # quick plot dVdlogD data
     # quick_dVdlogD_plot(dN)
@@ -2599,6 +2614,8 @@ if __name__ == '__main__':
 
         # remove the UTC timestamp on the array so it can be easily imported on a windows system
         met['time'] = np.array([i.replace(tzinfo=None) for i in met['time']])
+        dN['time'] = np.array([i.replace(tzinfo=None) for i in dN['time']])
+        pm10_mass['time'] = np.array([i.replace(tzinfo=None) for i in pm10_mass['time']])
 
         # pickle_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str_nm+'.pickle'
         # pickle_save = pickle_optics_save(pickle_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
