@@ -2098,7 +2098,7 @@ if __name__ == '__main__':
     'instruments': ['SMPS', 'APS']}
 
 
-    site_meta['ceil_lambda'] = 0.905e-06 # 0.355e-06  # 1.064e-06, 0.532e-06
+    site_meta['ceil_lambda'] = 0.532e-06 # 0.905e-06 # 0.355e-06  # 1.064e-06, 0.532e-06
 
     ceil_lambda = [site_meta['ceil_lambda']]
     period = site_meta['period']
@@ -2166,8 +2166,8 @@ if __name__ == '__main__':
     # density of molecules [kg m-3]
     # CBLK: # Zhang et al., (2016) Measuring the morphology and density of internally mixed black carbon
     #           with SP2 and VTDMA: New insight into the absorption enhancement of black carbon in the atmosphere
-    # ORG: Range of densities for organic carbon is mass (0.625 - 2 g cm-3)
-    #  Haywood et al 2003 used 1.35 g cm-3 but Schkolink et al., 2006 claim the average is 1.1 g cm-3 after a lit review
+    # CORG: Range of densities for organic carbon is mass (0.625 - 2 g cm-3)
+    #  Haywood et al 2003 used 1.35 g cm-3 but Schkolink et al., 2007 claim the average is 1.1 g cm-3 after a lit review
     aer_density = {'(NH4)2SO4': 1770.0,
                    'NH4NO3': 1720.0,
                    'NaCl': 2160.0,
@@ -2197,7 +2197,7 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2014'
+    year = '2015'
     year_str = str(year)
 
     # ============================================
