@@ -163,6 +163,7 @@ def CIR_Hanel(n_w, n_0, r_0, r):
 
     return n_swoll
 
+# old - original
 def calc_n_aerosol(aer, ceil_lambda):
 
     """
@@ -185,6 +186,24 @@ def calc_n_aerosol(aer, ceil_lambda):
 
     return n_aerosol
 
+def read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True):
+
+
+    n_species = {}
+    # Read in complex index of refraction data
+    for aer_i in aer_particles:
+
+        # get the name of the aerosol as is appears in the function
+        aer_i_name = aer_names[aer_i]
+
+        # get the complex index of refraction for the n (linearly interpolated from a lookup table)
+        n_species[aer_i], _ = linear_interpolate_n(aer_i_name, ceil_lambda)
+
+    # get water too?
+    if getH2O == True:
+        n_species['H2O'], _ = linear_interpolate_n('water', ceil_lambda)
+
+    return n_species
 
 def calc_n_murk(rel_vol, n):
 
@@ -331,7 +350,9 @@ if __name__ == '__main__':
 
     # calculate complex index of refraction for MURK species
     # output n is complex index of refraction (n + ik)
-    n_aerosol = calc_n_aerosol(all_aer, ceil_lambda)
+    # n_aerosol = calc_n_aerosol(all_aer, ceil_lambda)
+
+    n_aerosol = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
 
     # NOTE: Able to use volume in MURK equation instead of mass because, if mass is evenly distributed within a volume
     # then taking x of the mass = taking x of the volume.
