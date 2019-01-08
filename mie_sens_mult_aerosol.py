@@ -288,8 +288,8 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # Setup
 
-    # setup
-    ceil_lambda = [0.905e-06] # [m]
+    # setupl
+    ceil_lambda = [0.550e-06] # [m]
     # ceil_lambda = np.arange(0.69e-06, 1.19e-06, 0.05e-06) # [m]
     # ceil_lambda = np.arange(0.90e-06, 0.91e-06, 0.05e-08) # [m]
     # ceil_lambda = np.array(([0.90e-06, 0.91e-06, 0.92e-06])) # [m]
@@ -306,12 +306,12 @@ if __name__ == '__main__':
                 'Organic carbon': 0.38}
 
     # all the aerosol types
-    all_aer_order = ['Ammonium sulphate', 'Ammonium nitrate', 'Organic carbon', 'Biogenic', 'Generic NaCl', 'Soot', 'MURK']
+    all_aer_order = ['Ammonium sulphate', 'Ammonium nitrate', 'Organic carbon', 'Biogenic', 'Generic NaCl', 'Soot', 'water', 'MURK']
     # all_aer = ['ammonium_sulphate', 'ammonium_nitrate', 'organic_carbon', 'biogenic', 'NaCl', 'soot']
     all_aer = {'Ammonium sulphate': 'red', 'Ammonium nitrate':'orange', 'Organic carbon': [0.05, 0.9, 0.4],
-               'Biogenic': [0.05,0.56,0.85], 'Generic NaCl': 'magenta', 'Soot': 'brown'}
+               'Biogenic': [0.05,0.56,0.85], 'Generic NaCl': 'magenta', 'Soot': 'brown', 'water': 'blue'}
     aer_names = {'Ammonium sulphate': 'Ammonium sulphate', 'Ammonium nitrate': 'Ammonium nitrate', 'Biogenic': 'Biogenic',
-            'Organic carbon': 'Organic carbon', 'Generic NaCl': 'Generic NaCl', 'Soot':'Black carbon', 'MURK': 'MURK'}
+            'Organic carbon': 'Organic carbon', 'Generic NaCl': 'Generic NaCl', 'Soot':'Black carbon', 'MURK': 'MURK', 'water': 'water'}
     # all_aer = ['soot']
 
     # create dry size distribution [m]
@@ -350,9 +350,7 @@ if __name__ == '__main__':
 
     # calculate complex index of refraction for MURK species
     # output n is complex index of refraction (n + ik)
-    # n_aerosol = calc_n_aerosol(all_aer, ceil_lambda)
-
-    n_aerosol = read_n_data(aer_particles, aer_names, ceil_lambda, getH2O=True)
+    n_aerosol = calc_n_aerosol(all_aer, ceil_lambda)
 
     # NOTE: Able to use volume in MURK equation instead of mass because, if mass is evenly distributed within a volume
     # then taking x of the mass = taking x of the volume.
@@ -440,7 +438,7 @@ if __name__ == '__main__':
     plt.tick_params(axis='both',labelsize=10)
     plt.grid(b=True, which='major', color='grey', linestyle='--')
     plt.grid(b=True, which='minor', color=[0.85, 0.85, 0.85], linestyle='--')
-    plt.savefig(savedir + 'Q_ext_manyAer2_' + str(ceil_lambda[0]) + 'nm.png')
+    plt.savefig(savedir + 'Q_back_manyAer2_' + str(ceil_lambda[0]) + 'nm.png')
     print 'data dir is... ' + savedir + 'Q_ext_manyAer_' + str(ceil_lambda[0]) + 'nm.png'
     plt.tight_layout(h_pad=10.0)
     plt.close()
