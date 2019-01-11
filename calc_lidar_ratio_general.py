@@ -21,8 +21,10 @@ from dateutil import tz
 import ellUtils as eu
 from mie_sens_mult_aerosol import linear_interpolate_n
 from pymiecoated import Mie
+from scipy.stats import pearsonr
+from scipy.stats import spearmanr
 
-
+import os
 # Set up
 
 def fixed_radii_for_Nweights():
@@ -2098,7 +2100,7 @@ if __name__ == '__main__':
     'instruments': ['SMPS', 'APS']}
 
 
-    site_meta['ceil_lambda'] = 0.532e-06 # 0.905e-06 # 0.355e-06  # 1.064e-06, 0.532e-06
+    site_meta['ceil_lambda'] = 0.355e-06 # 0.355e-06 # 0.905e-06 # 0.355e-06  # 1.064e-06, 0.532e-06
 
     ceil_lambda = [site_meta['ceil_lambda']]
     period = site_meta['period']
@@ -2144,7 +2146,7 @@ if __name__ == '__main__':
     savestr = site_meta['site_short'] + '_' + '_'.join(site_meta['instruments'])
 
     # data years
-    years = [2014, 2015]
+    years = [2014]
 
     # resolution to average data to (in minutes! e.g. 60)
     timeRes = 60
@@ -2197,39 +2199,56 @@ if __name__ == '__main__':
     rn_pmlt2p5_microns, rn_pmlt2p5_m, \
     rn_2p5_10_microns, rn_2p5_10_m = fixed_radii_for_Nweights()
 
-    year = '2015'
+    year = '2014'
     year_str = str(year)
 
     # ============================================
     # Pickle read in
     # ============================================
 
-    print 'Reading in data...'
+    # print 'Reading in data...'
+    #
+    # # load in previously calculated S data
+    # #filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_'+ceil_lambda_str+'_hysteresis_shapecorr.npy'
+    # filename = '/home/nerc/Documents/MieScatt/data/pickle/North_Kensington/NK_SMPS_APS_PM10_withSoot_2014_905nm_hysteresis_shapecorr.npy'
+    # filename2 = '/home/nerc/Documents/MieScatt/data/pickle/North_Kensington/NK_SMPS_APS_PM10_withSoot_2015_905nm_hysteresis_shapecorr.npy'
+    # npy_load_in = np.load(filename).flat[0]
+    # npy_load_in2 = np.load(filename2).flat[0]
+    #
+    # # optics = npy_load_in['optics']
+    # # S = optics['S']
+    #
+    # S = np.append(npy_load_in['optics']['S'], npy_load_in['optics']['S'])
+    #
+    #
+    # #met = npy_load_in['met']
+    # met = {key: np.append(npy_load_in['met'][key], npy_load_in2['met'][key]) for key in npy_load_in['met'].iterkeys()}
+    # N_weight_pm10 = {key: np.append(npy_load_in['N_weight'][key], npy_load_in2['N_weight'][key]) for key in npy_load_in['N_weight'].iterkeys()}
+    #
+    # dN = npy_load_in['dN']
+    # N_weight_pm10 = npy_load_in['N_weight']
+    # pm10_mass = npy_load_in['pm10_mass']
+    # num_conc = npy_load_in['pm10_mass']
+    # time = npy_load_in['met']['time']
+    #
+    # np.sum(np.isfinite(S))
+    # idx = np.where(np.isfinite(S))
+    # time_2 = time[idx]
+    # time_un = np.unique(np.array([i.month for i in time_2]))
 
-    # load in previously calculated S data
-    #filename = pickledir+ 'NK_SMPS_APS_PM10_withSoot_'+year_str+'_'+ceil_lambda_str+'_hysteresis_shapecorr.npy'
-    filename = '/home/nerc/Documents/MieScatt/data/pickle/North_Kensington/NK_SMPS_APS_PM10_withSoot_2014_905nm_hysteresis_shapecorr.npy'
-    npy_load_in = np.load(filename).flat[0]
-
-    optics = npy_load_in['optics']
-    S = optics['S']
-
-    met = npy_load_in['met']
-    dN = npy_load_in['dN']
-    N_weight_pm10 = npy_load_in['N_weight']
-    pm10_mass = npy_load_in['pm10_mass']
-    num_conc = npy_load_in['pm10_mass']
-    time = npy_load_in['met']['time']
-
-    # remove the timezone and resave
-    npy_load_in['met']['time'] = np.array([i.replace(tzinfo=None) for i in met['time']])
-    npy_load_in['dN']['time'] = np.array([i.replace(tzinfo=None) for i in dN['time']])
-    npy_load_in['pm10_mass']['time'] = np.array([i.replace(tzinfo=None) for i in pm10_mass['time']])
-    np.save(filename, npy_load_in)
-
-    #idx = np.isfinite(allS) & np.isfinite(allRH)
-    #z = np.polyfit(allRH[idx]/100.0, allS[idx], 1)
-    #p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as GF was regressed against RH_frac)
+    #
+    # # # remove the timezone and resave
+    # # npy_load_in['met']['time'] = np.array([i.replace(tzinfo=None) for i in met['time']])
+    # # npy_load_in['dN']['time'] = np.array([i.replace(tzinfo=None) for i in dN['time']])
+    # # npy_load_in['pm10_mass']['time'] = np.array([i.replace(tzinfo=None) for i in pm10_mass['time']])
+    # # np.save(filename, npy_load_in)
+    #
+    # idx = np.isfinite(met['RH']) & np.isfinite(S)
+    # pearsonr(met['RH'][idx], S[idx])
+    #
+    # #idx = np.isfinite(allS) & np.isfinite(allRH)
+    # #z = np.polyfit(allRH[idx]/100.0, allS[idx], 1)
+    # #p = np.poly1d(z) # function to use the linear fit (range between 0 - 1.0 as GF was regressed against RH_frac)
 
     #  -----------------------------
     # Read
@@ -2324,9 +2343,14 @@ if __name__ == '__main__':
     # n_species['CORG'] = complex(n_species['CORG'].real, 0.01)
 
     # Read in physical growth factors (GF) for organic carbon (assumed to be the same as aged fossil fuel OC)
-    OC_meta = {'type': 'agedOCGF', 'extra': ''}
+    OC_meta = {'type': 'freshOCGF', 'extra': 'freshOCGF'}
     gf_ffoc = read_organic_carbon_growth_factors(ffoc_gfdir, OCtype=OC_meta['type'])
+    coeff = 0.3
+    gf_ffoc['GF'] = gf_ffoc['GF'] + ((coeff-1)*(gf_ffoc['GF']-1))
 
+    # reduce magnitude of fresh OC particle growth to 30 % of original.
+    # found by adjusting g(RH) to try and reproduce a scattering enhancement factor at 550 nm to match the parameterisation
+    # (Model 2 eqn.) in Kotchenruther and Hobbs (1998), also used in Thornhill et al. (2018) (Claires work).
 
     ## Read in species by mass data
     # -----------------------------------------
@@ -2623,10 +2647,13 @@ if __name__ == '__main__':
         # Read
         # -----------------------------
         # np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'.npy'
-        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+'_hysteresis_shapecorr.npy'
+        np_savename = pickledir +savestr+'_'+savesub+'_'+year+'_'+ceil_lambda_str+OC_meta['extra']+'_hysteresis_shapecorr.npy'
         np_save = numpy_optics_save(np_savename, optics, outputSave=True, met=met, N_weight=N_weight_pm10, num_conc=num_conc, dN=dN, pm10_mass=pm10_mass,
                     ceil_lambda=ceil_lambda, r_m_meters=r_m_meters)
         print np_savename + ' is saved!'
+
+    print 'average of S = ' + str(np.nanmean(S))
+    np.nanmean(N_weight_pm10['CORG'])
 
     # ------------------------------------------
 
@@ -2713,11 +2740,11 @@ if __name__ == '__main__':
     # (https://github.com/scipy/scipy/issues/6530)
     #r_str = '%.2f' % corr[0]
     fig, ax = plt.subplots(1,1,figsize=(8, 4))
-    key = 'CBLK'
-    scat = ax.scatter(met['RH'], S, c=N_weight_pm10[key]*100.0, vmin= 0.0, vmax = 25.0)
+    key = 'CORG' #'CBLK'
+    scat = ax.scatter(met['RH'], S, c=N_weight_pm10[key]*100.0, vmin= 30.0, vmax = 80.0) # CBLK 25
     cbar = plt.colorbar(scat, ax=ax)
     # cbar.set_label('Soot [%]', labelpad=-20, y=1.1, rotation=0)
-    cbar.set_label('[%]', labelpad=-20, y=1.1, rotation=0)
+    cbar.set_label('CORG [%]', labelpad=-20, y=1.1, rotation=0)
     plt.xlabel(r'$RH \/[\%]$')
     plt.ylabel(r'$Lidar Ratio \/[sr]$')
     plt.ylim([10.0, 90.0])
@@ -2725,7 +2752,7 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.suptitle(ceil_lambda_str)
     # # plt.savefig(savedir + 'S_vs_RH_'+year+'_'+site_meta['site_short']+'_'+process_type+'_'+Geisinger_str+'_scatter_'+ceil_lambda_str_nm+'.png')
-    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'withHyst_shapecorr.png')
+    plt.savefig(savedir + 'S_vs_RH_NK_'+year_str+'_'+key+'_'+ceil_lambda_str+'_'+OC_meta['type']+'_'+OC_meta['extra']+'withHyst_shapecorr_CORG.png')
     # plt.close(fig)
 
 
@@ -2807,138 +2834,138 @@ if __name__ == '__main__':
 
     # ------------------------------------------------
 
-    # # BOX PLOT - S binned by RH, then by soot
-    #
-    # ## 1. set up bins to divide the data [%]
-    # rh_bin_starts = np.array([0.0, 60.0, 70.0, 80.0, 90.0])
-    # rh_bin_ends = np.append(rh_bin_starts[1:], 100.0)
-    #
-    # # set up limit for soot last bin to be inf [fraction]
-    # soot_starts = np.array([0.0, 0.04, 0.08])
-    # soot_ends = np.append(soot_starts[1:], np.inf)
-    # soot_bins_num = len(soot_starts)
-    #
-    # # variables to help plot the legend
-    # soot_starts_str = [str(int(i*100.0)) for i in soot_starts]
-    # soot_ends_str = [str(int(i*100.0)) for i in soot_ends[:-1]] + ['100']
-    # soot_legend_str = [i+'-'+j+' %' for i, j in zip(soot_starts_str, soot_ends_str)]
-    # soot_colours = ['blue', 'orange', 'red']
-    #
-    # # positions for each boxplot (1/6, 3/6, 5/6 into each bin, given 3 soot groups)
-    # #   and widths for each boxplot
-    # pos = []
-    # widths = []
-    # mid = []
-    #
-    # for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
-    #
-    #     bin_6th = (rh_e-rh_s) * 1.0/6.0 # 1/6th of the current bin width
-    #     pos += [[rh_s + bin_6th, rh_s +(3*bin_6th), rh_s+(5*bin_6th)]] #1/6, 3/6, 5/6 into each bin for the soot boxplots
-    #     widths += [bin_6th]
-    #     mid += [rh_s +(3*bin_6th)]
-    #
-    #
-    # # Split the data - keep them in lists to preserve the order when plotting
-    # # bin_range_str will match each set of lists in rh_binned
-    # rh_split = {'binned': [], 'mean': [], 'n': [], 'bin_range_str': [], 'pos': []}
-    #
-    # for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
-    #
-    #     # bin range
-    #     rh_split['bin_range_str'] += [str(int(rh_s)) + '-' + str(int(rh_e))]
-    #
-    #     # the list of lists for this RH bin (the actual data, the mean and sample number)
-    #     rh_bin_i = []
-    #     rh_bin_mean_i = []
-    #     rh_bin_n_i = []
-    #
-    #     # extract out all S values that occured for this RH range and their corresponding CBLK weights
-    #     rh_bool = np.logical_and(met['RH'] >= rh_s, met['RH'] < rh_e)
-    #     S_rh_i = S[rh_bool]
-    #     N_weight_cblk_rh_i = N_weight_pm10['CBLK'][rh_bool]
-    #
-    #     # idx of binned data
-    #     for soot_s, soot_e in zip(soot_starts, soot_ends):
-    #
-    #         # booleon for the soot data, for this rh subsample
-    #         soot_bool = np.logical_and(N_weight_cblk_rh_i >= soot_s, N_weight_cblk_rh_i < soot_e)
-    #         S_rh_i_soot_j = S_rh_i[soot_bool] # soot subsample from the rh subsample
-    #
-    #
-    #         # store the values for this bin
-    #         rh_bin_i += [S_rh_i_soot_j] # the of subsample
-    #         rh_bin_mean_i += [np.mean(S_rh_i_soot_j)] # mean of of subsample
-    #         rh_bin_n_i += [len(S_rh_i_soot_j)] # number of subsample
-    #
-    #     # add each set of rh_bins onto the full set of rh_bins
-    #     rh_split['binned'] += [rh_bin_i]
-    #     rh_split['mean'] += [rh_bin_mean_i]
-    #     rh_split['n'] += [rh_bin_n_i]
-    #
-    #
-    # ## 2. Start the boxplots
-    # # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
+    # BOX PLOT - S binned by RH, then by soot
+
+    ## 1. set up bins to divide the data [%]
+    rh_bin_starts = np.array([0.0, 60.0, 70.0, 80.0, 90.0])
+    rh_bin_ends = np.append(rh_bin_starts[1:], 100.0)
+
+    # set up limit for soot last bin to be inf [fraction]
+    soot_starts = np.array([0.0, 0.04, 0.08])
+    soot_ends = np.append(soot_starts[1:], np.inf)
+    soot_bins_num = len(soot_starts)
+
+    # variables to help plot the legend
+    soot_starts_str = [str(int(i*100.0)) for i in soot_starts]
+    soot_ends_str = [str(int(i*100.0)) for i in soot_ends[:-1]] + ['100']
+    soot_legend_str = [i+'-'+j+' %' for i, j in zip(soot_starts_str, soot_ends_str)]
+    soot_colours = ['blue', 'orange', 'red']
+
+    # positions for each boxplot (1/6, 3/6, 5/6 into each bin, given 3 soot groups)
+    #   and widths for each boxplot
+    pos = []
+    widths = []
+    mid = []
+
+    for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
+
+        bin_6th = (rh_e-rh_s) * 1.0/6.0 # 1/6th of the current bin width
+        pos += [[rh_s + bin_6th, rh_s +(3*bin_6th), rh_s+(5*bin_6th)]] #1/6, 3/6, 5/6 into each bin for the soot boxplots
+        widths += [bin_6th]
+        mid += [rh_s +(3*bin_6th)]
+
+
+    # Split the data - keep them in lists to preserve the order when plotting
+    # bin_range_str will match each set of lists in rh_binned
+    rh_split = {'binned': [], 'mean': [], 'n': [], 'bin_range_str': [], 'pos': []}
+
+    for i, (rh_s, rh_e) in enumerate(zip(rh_bin_starts, rh_bin_ends)):
+
+        # bin range
+        rh_split['bin_range_str'] += [str(int(rh_s)) + '-' + str(int(rh_e))]
+
+        # the list of lists for this RH bin (the actual data, the mean and sample number)
+        rh_bin_i = []
+        rh_bin_mean_i = []
+        rh_bin_n_i = []
+
+        # extract out all S values that occured for this RH range and their corresponding CBLK weights
+        rh_bool = np.logical_and(met['RH'] >= rh_s, met['RH'] < rh_e)
+        S_rh_i = S[rh_bool]
+        N_weight_cblk_rh_i = N_weight_pm10['CBLK'][rh_bool]
+
+        # idx of binned data
+        for soot_s, soot_e in zip(soot_starts, soot_ends):
+
+            # booleon for the soot data, for this rh subsample
+            soot_bool = np.logical_and(N_weight_cblk_rh_i >= soot_s, N_weight_cblk_rh_i < soot_e)
+            S_rh_i_soot_j = S_rh_i[soot_bool] # soot subsample from the rh subsample
+
+
+            # store the values for this bin
+            rh_bin_i += [S_rh_i_soot_j] # the of subsample
+            rh_bin_mean_i += [np.mean(S_rh_i_soot_j)] # mean of of subsample
+            rh_bin_n_i += [len(S_rh_i_soot_j)] # number of subsample
+
+        # add each set of rh_bins onto the full set of rh_bins
+        rh_split['binned'] += [rh_bin_i]
+        rh_split['mean'] += [rh_bin_mean_i]
+        rh_split['n'] += [rh_bin_n_i]
+
+
+    ## 2. Start the boxplots
+    # whis=[10, 90] wont work if the q1 or q3 extend beyond the whiskers... (the one bin with n=3...)
     # fig = plt.figure(figsize=(7, 3.5))
-    # # fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
-    # # plt.hold(True)
-    # for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
-    #
-    #     bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], sym='x')
-    #
-    #     # colour the boxplots
-    #     for c, colour_c in enumerate(soot_colours):
-    #
-    #         # some parts of the boxplots are in two parts (e.g. 2 caps for each boxplot) therefore make an x_idx
-    #         #   for each pair
-    #         c_pair_idx = range(2*c, (2*c)+(len(soot_colours)-1))
-    #
-    #         plt.setp(bp['boxes'][c], color=colour_c)
-    #         plt.setp(bp['medians'][c], color=colour_c)
-    #         [plt.setp(bp['caps'][i], color=colour_c) for i in c_pair_idx]
-    #         [plt.setp(bp['whiskers'][i], color=colour_c) for i in c_pair_idx]
-    #         #[plt.setp(bp['fliers'][i], color=colour_c) for i in c_pair_idx]
-    #
-    # print 'test'
-    # # add sample number at the top of each box
-    # (y_min, y_max) = ax.get_ylim()
-    # upperLabels = [str(np.round(n, 2)) for n in np.hstack(rh_split['n'])]
-    # for tick in range(len(np.hstack(pos))):
-    #     k = tick % 3
-    #     ax.text(np.hstack(pos)[tick], y_max - (y_max * (0.05)*(k+1)), upperLabels[tick],
-    #              horizontalalignment='center', size='x-small')
-    #
-    # ## 3. Prettify boxplot (legend, vertical lines, sample size at top)
-    # # prettify
-    # ax.set_xlim([0.0, 100.0])
-    # ax.set_xticks(mid)
-    # ax.set_xticklabels(rh_split['bin_range_str'])
-    # ax.set_ylabel(r'$S \/[sr]$')
-    # ax.set_xlabel(r'$RH \/[\%]$')
-    #
-    #
-    # # add vertical dashed lines to split the groups up
-    # (y_min, y_max) = ax.get_ylim()
-    # for rh_e in rh_bin_ends:
-    #     plt.vlines(rh_e, y_min, y_max, alpha=0.3, color='grey', linestyle='--')
-    #
-    # # draw temporary lines to create a legend
-    # lin=[]
-    # for c, colour_c in enumerate(soot_colours):
-    #     lin_i, = plt.plot([np.nanmean(S),np.nanmean(S)],color=colour_c) # plot line with matching colour
-    #     lin += [lin_i] # keep the line handle in a list for the legend plotting
-    # plt.legend(lin, soot_legend_str, fontsize=10, loc=(0.02,0.68))
-    # [i.set_visible(False) for i in lin] # set the line to be invisible
-    #
-    # plt.tight_layout()
-    #
-    # ## 4. Save fig as unique image
-    # i = 1
-    # savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
-    # while os.path.exists(savepath) == True:
-    #     i += 1
-    #     savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str_nm+'_'+str(i)+'.png'
-    #
-    # plt.savefig(savepath)
+    fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
+    # plt.hold(True)
+    for j, (rh_bin_j, bin_range_str_j) in enumerate(zip(rh_split['binned'], rh_split['bin_range_str'])):
+
+        bp = plt.boxplot(list(rh_bin_j), widths=widths[j], positions=pos[j], sym='x')
+
+        # colour the boxplots
+        for c, colour_c in enumerate(soot_colours):
+
+            # some parts of the boxplots are in two parts (e.g. 2 caps for each boxplot) therefore make an x_idx
+            #   for each pair
+            c_pair_idx = range(2*c, (2*c)+(len(soot_colours)-1))
+
+            plt.setp(bp['boxes'][c], color=colour_c)
+            plt.setp(bp['medians'][c], color=colour_c)
+            [plt.setp(bp['caps'][i], color=colour_c) for i in c_pair_idx]
+            [plt.setp(bp['whiskers'][i], color=colour_c) for i in c_pair_idx]
+            #[plt.setp(bp['fliers'][i], color=colour_c) for i in c_pair_idx]
+
+    print 'test'
+    # add sample number at the top of each box
+    (y_min, y_max) = ax.get_ylim()
+    upperLabels = [str(np.round(n, 2)) for n in np.hstack(rh_split['n'])]
+    for tick in range(len(np.hstack(pos))):
+        k = tick % 3
+        ax.text(np.hstack(pos)[tick], y_max - (y_max * (0.05)*(k+1)), upperLabels[tick],
+                 horizontalalignment='center', size='x-small')
+
+    ## 3. Prettify boxplot (legend, vertical lines, sample size at top)
+    # prettify
+    ax.set_xlim([0.0, 100.0])
+    ax.set_xticks(mid)
+    ax.set_xticklabels(rh_split['bin_range_str'])
+    ax.set_ylabel(r'$S \/[sr]$')
+    ax.set_xlabel(r'$RH \/[\%]$')
+
+
+    # add vertical dashed lines to split the groups up
+    (y_min, y_max) = ax.get_ylim()
+    for rh_e in rh_bin_ends:
+        plt.vlines(rh_e, y_min, y_max, alpha=0.3, color='grey', linestyle='--')
+
+    # draw temporary lines to create a legend
+    lin=[]
+    for c, colour_c in enumerate(soot_colours):
+        lin_i, = plt.plot([np.nanmean(S),np.nanmean(S)],color=colour_c) # plot line with matching colour
+        lin += [lin_i] # keep the line handle in a list for the legend plotting
+    plt.legend(lin, soot_legend_str, fontsize=10, loc=(0.02,0.68))
+    [i.set_visible(False) for i in lin] # set the line to be invisible
+
+    plt.tight_layout()
+
+    ## 4. Save fig as unique image
+    i = 1
+    savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str+'_'+str(i)+'.png'
+    while os.path.exists(savepath) == True:
+        i += 1
+        savepath = savedir + 'S_vs_RH_binnedSoot_'+period+'_'+savestr+'_boxplot_'+ceil_lambda_str+'_'+str(i)+'.png'
+
+    plt.savefig(savepath)
 
 
      # ---------------------------------------
