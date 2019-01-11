@@ -4,6 +4,7 @@ __author__ = 'Elliott_Warren'
 import numpy as np
 import matplotlib.pyplot as plt
 from pymiecoated import Mie
+import ellUtils as eu
 
 from calc_lidar_ratio_numdist import read_n_data
 
@@ -88,7 +89,7 @@ datadir = '/home/nerc/Documents/MieScatt/data/'
 # save dir
 savedir = maindir + 'figures/LidarRatio/'
 
-ceil_lambda = 905.0e-09
+ceil_lambda = 355.0e-09
 # ceil_lambda = 355.0e-09
 # ceil_lambda = 532.0e-09
 # ceil_lambda = 1064e-09
@@ -129,9 +130,9 @@ aer_particles = ['(NH4)2SO4', 'NH4NO3', 'NaCl', 'CORG', 'CBLK']
 
 aer_labels = {'(NH4)2SO4': 'Ammonium sulphate',
              'NH4NO3': 'Ammonium nitrate',
-             'NaCl': 'Generic NaCl',
+             'NaCl': 'NaCl',
              'CORG': 'Organic carbon',
-             'CBLK': 'Soot',
+             'CBLK': 'Elemental carbon',
              'H2O': 'Pure water'}
 
 
@@ -179,8 +180,12 @@ plt.ylim([1.0, 10.0e5])
 plt.xlim([0.01, 20])
 plt.ylabel(r'$Lidar \/Ratio \/[sr]$')
 plt.xlabel(r'$Diameter \/[\mu m]$')
+plt.axvline(x=0.08, color='black', linestyle='--', linewidth=2)
+plt.axvline(x=0.8, color='black', linestyle='--', linewidth=2)
 plt.legend(loc='upper center', fontsize=10)
-plt.suptitle('lambda=' + ceil_lambda_str_nm)
+eu.add_at(ax, '(a) 355 nm')
+# plt.text('(a) 355 nm', bbox={'edgecolor':'none'})
+#plt.suptitle('lambda=' + ceil_lambda_str_nm)
 plt.tight_layout()
 # plt.show()
 plt.savefig(savedir + 'quickplot_S_vs_r_bySpecies_'+ ceil_lambda_str_nm +'.png')
